@@ -10,3 +10,7 @@ CREATE TABLE usuario (
     created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_usuario_email  ON usuario(email);
+CREATE INDEX idx_usuario_rol    ON usuario(rol);
+CREATE INDEX idx_usuario_activo ON usuario(activo);
