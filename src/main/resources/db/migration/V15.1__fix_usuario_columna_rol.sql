@@ -1,29 +1,25 @@
 -- ============================================================
 -- V15.1: Normaliza la columna de rol en usuario
--- La V2 original fue aplicada con columna 'rol' en lugar de 'rol_id'
+-- La V2 original tenía 'rol' VARCHAR NOT NULL en lugar de 'rol_id' UUID FK
+-- La tabla usuario no tiene datos aún (V16 es el primer INSERT)
 -- ============================================================
 
 DO $$
 BEGIN
-    -- Caso: existe 'rol' y 'rol_id' (V3.1 agregó rol_id, pero rol sigue con NOT NULL)
+    -- Eliminar rol_id UUID nullable que agregó V3.1 (si existe)
     IF EXISTS (SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol')
-    AND EXISTS (SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol_id')
-    THEN
+                WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol_id') THEN
         ALTER TABLE usuario DROP COLUMN rol_id;
-        ALTER TABLE usuario RENAME COLUMN rol TO rol_id;
-        ALTER TABLE usuario ADD CONSTRAINT fk_usuario_rol
-            FOREIGN KEY (rol_id) REFERENCES rol(id);
+    END IF;
 
-    -- Caso: solo existe 'rol' (sin rol_id)
-    ELSIF EXISTS (SELECT 1 FROM information_schema.columns
-                   WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol')
-    AND NOT EXISTS (SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol_id')
-    THEN
-        ALTER TABLE usuario RENAME COLUMN rol TO rol_id;
-        ALTER TABLE usuario ADD CONSTRAINT fk_usuario_rol
-            FOREIGN KEY (rol_id) REFERENCES rol(id);
+    -- Eliminar la columna 'rol' VARCHAR que vino de la V2 original (si existe)
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'usuario' AND column_name = 'rol') THEN
+        ALTER TABLE usuario DROP COLUMN rol;
     END IF;
 END $$;
+
+-- Agregar la columna correcta: UUID NOT NULL con FK a rol
+-- La tabla usuario está vacía así que NOT NULL es válido sin DEFAULT
+ALTER TABLE usuario ADD COLUMN rol_id UUID NOT NULL REFERENCES rol(id);
+CREATE INDEX idx_usuario_rol_id ON usuario(rol_id);
