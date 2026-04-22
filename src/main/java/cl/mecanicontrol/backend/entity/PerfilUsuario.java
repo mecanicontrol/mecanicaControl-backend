@@ -16,7 +16,7 @@ public class PerfilUsuario {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id_perfil_usuario")
+    @Column(name = "id")
     private UUID id;
 
     @OneToOne
@@ -36,10 +36,16 @@ public class PerfilUsuario {
     private String fotoUrl;
 
     @Column(name = "preferencias", columnDefinition = "jsonb")
-    private String preferencias;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    private String preferencias = "{}";
 
     @Column(name = "ultima_sesion")
     private LocalDateTime ultimaSesion;
 
-
+    @PrePersist
+    protected void onCreate() {
+        if(preferencias == null) {
+            preferencias = "{}";
+        }
+    }
 }
