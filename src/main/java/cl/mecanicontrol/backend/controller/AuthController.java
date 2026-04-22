@@ -1,5 +1,6 @@
 package cl.mecanicontrol.backend.controller;
 
+import cl.mecanicontrol.backend.dto.auth.AuthRequestDTO;
 import cl.mecanicontrol.backend.dto.auth.AuthResponseDTO;
 import cl.mecanicontrol.backend.dto.auth.RegisterRequestDTO;
 import cl.mecanicontrol.backend.service.AuthService;
@@ -18,6 +19,11 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponseDTO> login(@Valid @RequestBody AuthRequestDTO request){
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @PostMapping("/register")
