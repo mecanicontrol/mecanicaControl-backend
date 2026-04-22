@@ -43,7 +43,7 @@ public class ServicioCatalogo {
     @Column(name = "precio_base")
     private BigDecimal precioBase;
     @Column(name = "activo")
-    private Boolean ServicioActivo;
+    private Boolean servicioActivo;
 
     
 
