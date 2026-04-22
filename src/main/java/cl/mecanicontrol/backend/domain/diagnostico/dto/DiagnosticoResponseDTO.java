@@ -6,5 +6,5 @@ public record DiagnosticoResponseDTO(
     String resumenDiagnostico,
     String nivelUrgencia,
     String recomendacionGeneral,
-    List<ServicioRecomendadoDTO> servicioRecomendados
+    List<ServicioRecomendadoDTO> serviciosRecomendados
 ) {}
