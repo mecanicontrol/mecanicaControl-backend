@@ -48,6 +48,10 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/**"
                         ).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/agendamientos").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/cotizaciones").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/disponibilidad").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/marcas/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
