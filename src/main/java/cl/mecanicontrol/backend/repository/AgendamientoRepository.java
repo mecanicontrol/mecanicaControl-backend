@@ -33,4 +33,27 @@ public interface AgendamientoRepository extends JpaRepository<Agendamiento, UUID
 
     @Query("SELECT a FROM Agendamiento a WHERE a.idEstadoAgendamiento.nombre = 'CONFIRMADO' AND a.fechaInicio >= :desde AND a.fechaInicio < :hasta")
     List<Agendamiento> findConfirmadosEnFecha(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
+
+    /**
+     * Cuenta vehículos que físicamente estarán en el taller en el slot dado.
+     * Prioridad de hora de término:
+     *   1. prediccion_tiempo_ot.hora_fin_estimada  (predicción IA)
+     *   2. orden_trabajo.fecha_cierre              (cierre manual de OT)
+     *   3. agendamiento.fecha_hora_fin             (hora estimada al agendar)
+     *
+     * Excluye agendamientos CANCELADO/COMPLETADO y OTs COMPLETADA/CANCELADA.
+     */
+    @Query(value = """
+        SELECT COUNT(DISTINCT a.id)
+        FROM agendamiento a
+        JOIN estado_agendamiento ea ON a.estado_agendamiento_id = ea.id
+        LEFT JOIN orden_trabajo ot ON ot.agendamiento_id = a.id
+        LEFT JOIN estado_ot eot    ON ot.estado_ot_id = eot.id
+        LEFT JOIN prediccion_tiempo_ot p ON p.orden_trabajo_id = ot.id
+        WHERE ea.nombre NOT IN ('CANCELADO', 'COMPLETADO')
+          AND (eot.nombre IS NULL OR eot.nombre NOT IN ('COMPLETADA', 'CANCELADA'))
+          AND a.fecha_hora_inicio <= :slot
+          AND COALESCE(p.hora_fin_estimada, ot.fecha_cierre, a.fecha_hora_fin) > :slot
+        """, nativeQuery = true)
+    long countVehiculosEnTallerEnSlot(@Param("slot") LocalDateTime slot);
 }

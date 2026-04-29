@@ -139,45 +139,30 @@ public class AgendamientoServiceImpl implements AgendamientoService {
         return toDTO(guardado);
     }
 
+    private static final int CAPACIDAD_MAXIMA_DIA = 15;
+    private static final LocalTime HORA_APERTURA   = LocalTime.of(9, 0);
+    private static final LocalTime HORA_CIERRE     = LocalTime.of(16, 0);
+
     @Override
     public List<DisponibilidadSlotDTO> getDisponibilidad(LocalDate fecha, UUID servicioId) {
         ServicioCatalogo servicio = servicioRepo.findById(servicioId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado"));
 
         int duracionMinutos = servicio.getDuracion() != null ? servicio.getDuracion() : 60;
-        LocalDateTime desde = fecha.atStartOfDay();
-        LocalDateTime hasta = fecha.atTime(LocalTime.MAX);
-
-        List<Agendamiento> confirmados = agendamientoRepo.findConfirmadosEnFecha(desde, hasta);
-        List<Tecnico> tecnicos = tecnicoRepo.findByDisponibleTrue();
 
         List<DisponibilidadSlotDTO> slots = new ArrayList<>();
-        LocalTime horaInicio = LocalTime.of(8, 0);
-        LocalTime horaFin = LocalTime.of(18, 0);
+        LocalDateTime slotInicio = fecha.atTime(HORA_APERTURA);
 
-        for (Tecnico tecnico : tecnicos) {
-            LocalDateTime slotInicio = fecha.atTime(horaInicio);
-            while (slotInicio.plusMinutes(duracionMinutos).toLocalTime().isBefore(horaFin) ||
-                   slotInicio.plusMinutes(duracionMinutos).toLocalTime().equals(horaFin)) {
+        // Slots de 1 hora fija — cualquier servicio puede iniciar antes del cierre.
+        // duracionMinutos solo define el fechaHoraFin para el cálculo de capacidad.
+        while (slotInicio.toLocalTime().isBefore(HORA_CIERRE)) {
+            LocalDateTime slotFin = slotInicio.plusMinutes(duracionMinutos);
 
-                LocalDateTime slotFin = slotInicio.plusMinutes(duracionMinutos);
-                final LocalDateTime si = slotInicio;
-                final LocalDateTime sf = slotFin;
+            long vehiculosEnTaller = agendamientoRepo.countVehiculosEnTallerEnSlot(slotInicio);
+            boolean disponible = vehiculosEnTaller < CAPACIDAD_MAXIMA_DIA;
 
-                boolean ocupado = confirmados.stream().anyMatch(a ->
-                    a.getIdTecnico() != null &&
-                    a.getIdTecnico().getIdTecnico().equals(tecnico.getIdTecnico()) &&
-                    a.getFechaInicio().isBefore(sf) &&
-                    a.getFechaFin().isAfter(si)
-                );
-
-                String nombreTecnico = tecnico.getIdUsuario() != null
-                    ? tecnico.getIdUsuario().getNombre() + " " + tecnico.getIdUsuario().getApellido()
-                    : "Técnico";
-
-                slots.add(new DisponibilidadSlotDTO(slotInicio, slotFin, !ocupado, tecnico.getIdTecnico(), nombreTecnico));
-                slotInicio = slotFin;
-            }
+            slots.add(new DisponibilidadSlotDTO(slotInicio.toString(), slotFin.toString(), disponible, null, null));
+            slotInicio = slotInicio.plusHours(1);
         }
 
         return slots;
