@@ -76,11 +76,11 @@ public class CatalogoService {
 
     public List<ModeloVehiculoDTO> getModelosByMarca(UUID marcaId){
         return modeloVehiculoRepository.findAll().stream()
-                .filter(m -> m.getMarcaVehiculo().getId().equals(marcaId))
+                .filter(m -> m.getMarca().getId().equals(marcaId))
                 .map(m -> new ModeloVehiculoDTO(
                         m.getId(),
-                        m.getMarcaVehiculo().getId(),
-                        m.getMarcaVehiculo().getNombre(),
+                        m.getMarca().getId(),
+                        m.getMarca().getNombre(),
                         m.getNombre()))
                 .toList();
     }
