@@ -8,5 +8,6 @@ public record DiagnosticoRequestDTO(
     String marca,
     String modelo,
     Short anio,
-    Integer kilometraje
+    Integer kilometraje,
+    String patente
 ) {}

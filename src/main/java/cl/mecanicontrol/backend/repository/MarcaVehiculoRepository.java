@@ -1,11 +1,11 @@
 package cl.mecanicontrol.backend.repository;
 
-import cl.mecanicontrol.backend.entity.MarcaVehiculo;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.UUID;
+import cl.mecanicontrol.backend.entity.MarcaVehiculo;
 
 @Repository
-public interface MarcaVehiculoRepository extends JpaRepository<MarcaVehiculo, UUID> {
-}
+public interface MarcaVehiculoRepository extends JpaRepository<MarcaVehiculo, UUID> {}
