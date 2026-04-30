@@ -7,7 +7,7 @@ import lombok.Setter;
 import java.util.UUID;
 
 @Entity
-@Table(name = "estado_ pago")
+@Table(name = "estado_pago")
 @Getter
 @Setter
 public class EstadoPago {

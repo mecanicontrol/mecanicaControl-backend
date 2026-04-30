@@ -45,7 +45,4 @@ public class ServicioCatalogo {
     @Column(name = "activo")
     private Boolean servicioActivo;
 
-    
-
-
 }
