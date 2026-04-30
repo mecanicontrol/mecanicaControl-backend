@@ -19,6 +19,10 @@ public class CorsConfig {
             "http://localhost:5174",
             "https://mecanicacontrol-frontend.onrender.com"
         ));
+        // Vercel preview deployments tienen URLs dinámicas — se cubren con pattern
+        config.setAllowedOriginPatterns(List.of(
+            "https://*.vercel.app"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
