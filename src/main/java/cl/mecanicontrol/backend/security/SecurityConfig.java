@@ -43,12 +43,18 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/api/ia/diagnosticar",
                                 "/api/seguimiento/**",
+                                "/api/disponibilidad",
+                                "/api/marcas/**",
+                                "/api/modelos/**",
+                                "/api/servicios",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
                                 "/actuator/**",
                                 "/api/catalogos/**"
                         ).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/agendamientos").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/cotizaciones").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

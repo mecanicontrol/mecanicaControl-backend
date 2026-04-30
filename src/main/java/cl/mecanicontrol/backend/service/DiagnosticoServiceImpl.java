@@ -11,7 +11,6 @@ import cl.mecanicontrol.backend.dto.DiagnosticoRequestDTO;
 import cl.mecanicontrol.backend.dto.DiagnosticoResponseDTO;
 import cl.mecanicontrol.backend.entity.Diagnostico;
 import cl.mecanicontrol.backend.repository.DiagnosticoRepository;
-import cl.mecanicontrol.backend.service.GroqService;
 import cl.mecanicontrol.backend.repository.ServicioCatalogoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,8 +41,8 @@ public class DiagnosticoServiceImpl implements DiagnosticoService {
         // 3. Llamar a Groq
         String respuestaRaw = groqService.llamar(prompt);
 
-        // 4. Parsear la respuesta JSON
-        DiagnosticoResponseDTO response = parsearRespuesta(respuestaRaw);
+        // 4. Parsear la respuesta JSON y enriquecer con datos del vehículo
+        DiagnosticoResponseDTO response = parsearRespuesta(respuestaRaw, request);
 
         // 5. Guardar en BD
         guardarDiagnostico(request, respuestaRaw, response);
@@ -88,20 +87,36 @@ public class DiagnosticoServiceImpl implements DiagnosticoService {
         return sb.toString();
     }
 
-    private DiagnosticoResponseDTO parsearRespuesta(String raw) {
+    private DiagnosticoResponseDTO parsearRespuesta(String raw, DiagnosticoRequestDTO request) {
         try {
             String json = raw
                 .replaceAll("```json", "")
                 .replaceAll("```", "")
                 .trim();
-            return objectMapper.readValue(json, DiagnosticoResponseDTO.class);
+            DiagnosticoResponseDTO parsed = objectMapper.readValue(json, DiagnosticoResponseDTO.class);
+            return new DiagnosticoResponseDTO(
+                parsed.resumenDiagnostico(),
+                parsed.nivelUrgencia(),
+                parsed.recomendacionGeneral(),
+                parsed.serviciosRecomendados(),
+                request.patente(),
+                request.marca(),
+                request.modelo(),
+                request.anio(),
+                request.kilometraje()
+            );
         } catch (Exception e) {
             log.error("Error parseando respuesta Groq: {}", e.getMessage());
             return new DiagnosticoResponseDTO(
                 "No se pudo procesar el diagnóstico automáticamente.",
                 "NORMAL",
                 "Te recomendamos visitar el taller para una revisión presencial.",
-                List.of()
+                List.of(),
+                request.patente(),
+                request.marca(),
+                request.modelo(),
+                request.anio(),
+                request.kilometraje()
             );
         }
     }

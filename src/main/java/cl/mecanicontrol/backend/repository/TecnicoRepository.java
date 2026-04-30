@@ -6,10 +6,9 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import cl.mecanicontrol.backend.entity.ModeloVehiculo;
+import cl.mecanicontrol.backend.entity.Tecnico;
 
 @Repository
-public interface ModeloVehiculoRepository extends JpaRepository<ModeloVehiculo, UUID> {
-    List<ModeloVehiculo> findByMarcaId(UUID marcaId);
-
+public interface TecnicoRepository extends JpaRepository<Tecnico, UUID> {
+    List<Tecnico> findByDisponibleTrue();
 }
