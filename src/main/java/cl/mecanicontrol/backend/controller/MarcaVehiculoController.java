@@ -5,6 +5,7 @@ import cl.mecanicontrol.backend.service.MarcaVehiculoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,10 +14,10 @@ import java.util.UUID;
 
 
 @RestController
-@RequestMapping("/marca")
+@RequestMapping("api/marcas")
 @RequiredArgsConstructor
 public class MarcaVehiculoController {
-    private MarcaVehiculoService marcaVehiculoService;
+    private final MarcaVehiculoService marcaVehiculoService;
 
 
     @GetMapping("/listar")
@@ -27,5 +28,10 @@ public class MarcaVehiculoController {
     @GetMapping("id/{id}")
     public ResponseEntity<MarcaVehiculo> findByIdMarca(UUID idMarca){
         return ResponseEntity.ok(marcaVehiculoService.findByIdMarca(idMarca));
+    }
+
+    @PostMapping("/save/marca")
+    public ResponseEntity<MarcaVehiculo> createMarca(MarcaVehiculo marcaVehiculo){
+        return ResponseEntity.ok(marcaVehiculoService.createMarca(marcaVehiculo));
     }
 }

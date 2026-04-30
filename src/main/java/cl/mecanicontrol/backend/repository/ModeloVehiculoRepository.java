@@ -11,4 +11,5 @@ import cl.mecanicontrol.backend.entity.ModeloVehiculo;
 @Repository
 public interface ModeloVehiculoRepository extends JpaRepository<ModeloVehiculo, UUID> {
     List<ModeloVehiculo> findByMarcaId(UUID marcaId);
+
 }
