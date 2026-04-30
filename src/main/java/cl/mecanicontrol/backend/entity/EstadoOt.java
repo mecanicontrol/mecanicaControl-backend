@@ -8,17 +8,18 @@ import lombok.Setter;
 import java.util.UUID;
 
 @Entity
-@Table(name = "nivel_tecnico")
+@Table(name = "estado_ot")
 @Getter
 @Setter
 @NoArgsConstructor
-public class NivelTecnico {
+public class EstadoOt {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "nombre", nullable = false, unique = true)
+    @Column(name = "nombre",  nullable = false, unique = true)
     private String nombre;
 
     @Column(name = "descripcion")

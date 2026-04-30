@@ -50,7 +50,8 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
-                                "/actuator/**"
+                                "/actuator/**",
+                                "/api/catalogos/**"
                         ).permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/agendamientos").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/cotizaciones").permitAll()
