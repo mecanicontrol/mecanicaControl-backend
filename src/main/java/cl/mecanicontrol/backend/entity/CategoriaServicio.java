@@ -19,10 +19,12 @@ import lombok.Setter;
 public class CategoriaServicio {
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
-    @Column(name= "id")
+    @Column(name= "id", nullable = false)
     private UUID id_categoria_servicio;
-    @Column(name= "nombre")
+
+    @Column(name= "nombre",  nullable = false, unique = true)
     private String nombreCategoriaServicio;
+
     @Column(name= "descripcion")
     private String descripcionCategoriaService;
 
