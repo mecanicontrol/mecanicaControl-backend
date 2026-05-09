@@ -51,4 +51,7 @@ public class Vehiculo {
 
     @Column(name = "numero_chasis")
     private String numeroChasis;
+
+    @Column(name = "alias")
+    private String alias;
 }

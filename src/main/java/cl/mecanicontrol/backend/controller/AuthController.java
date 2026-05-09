@@ -2,6 +2,7 @@ package cl.mecanicontrol.backend.controller;
 
 import cl.mecanicontrol.backend.dto.auth.AuthRequestDTO;
 import cl.mecanicontrol.backend.dto.auth.AuthResponseDTO;
+import cl.mecanicontrol.backend.dto.auth.RegisterConVehiculoRequestDTO;
 import cl.mecanicontrol.backend.dto.auth.RegisterRequestDTO;
 import cl.mecanicontrol.backend.service.AuthService;
 import jakarta.validation.Valid;
@@ -27,7 +28,12 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponseDTO> login(@Valid @RequestBody RegisterRequestDTO request){
+    public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request){
         return ResponseEntity.status(201).body(authService.register(request));
+    }
+
+    @PostMapping("/register-con-vehiculo")
+    public ResponseEntity<AuthResponseDTO> registerConVehiculo(@Valid @RequestBody RegisterConVehiculoRequestDTO request){
+        return ResponseEntity.status(201).body(authService.registerConVehiculo(request));
     }
 }
