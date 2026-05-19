@@ -14,16 +14,12 @@ import cl.mecanicontrol.backend.repository.ModeloVehiculoRepository;
 import cl.mecanicontrol.backend.repository.NivelFidelizacionRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
 import cl.mecanicontrol.backend.repository.VehiculoRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
 
 import java.util.List;
 import java.util.UUID;
@@ -59,6 +55,29 @@ public class VehiculoController {
         List<VehiculoResponseDTO> dtos = vehiculoRepo.findByClienteId(cliente.getId())
                 .stream().map(this::toDTO).toList();
         return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<VehiculoResponseDTO> findById(@PathVariable UUID id) {
+        Vehiculo v = vehiculoRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
+        return ResponseEntity.ok(toDTO(v));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<VehiculoResponseDTO> update(@PathVariable UUID id, @RequestBody VehiculoRequestDTO request) {
+        Vehiculo v = vehiculoRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehiculo no encontrado"));
+
+        if (request.patente() != null) v.setPatente(request.patente().toUpperCase().trim());
+        if (request.marcaId() != null) v.setMarcaVehiculoId(UUID.fromString(request.marcaId()));
+        if (request.modeloId() != null) v.setModeloVehiculoId(UUID.fromString(request.modeloId()));
+        if (request.anio() != null) v.setAnio(request.anio().shortValue());
+        if (request.kilometraje() != null) v.setKilometrajeIngreso(request.kilometraje());
+        if (request.alias() != null) v.setAlias(request.alias());
+
+        vehiculoRepo.save(v);
+        return ResponseEntity.ok(toDTO(v));
     }
 
     @PostMapping

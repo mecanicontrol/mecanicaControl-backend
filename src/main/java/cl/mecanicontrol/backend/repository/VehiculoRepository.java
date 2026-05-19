@@ -1,6 +1,7 @@
 package cl.mecanicontrol.backend.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,7 +11,10 @@ import cl.mecanicontrol.backend.entity.Vehiculo;
 
 @Repository
 public interface VehiculoRepository extends JpaRepository<Vehiculo, UUID> {
+
     List<Vehiculo> findByClienteId(UUID clienteId);
 
     java.util.Optional<Vehiculo> findByPatente(String patente);
+
+    boolean existsByPatente(String patente);
 }
