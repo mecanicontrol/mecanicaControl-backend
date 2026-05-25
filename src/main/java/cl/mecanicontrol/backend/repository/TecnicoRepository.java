@@ -1,6 +1,7 @@
 package cl.mecanicontrol.backend.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,4 +12,6 @@ import cl.mecanicontrol.backend.entity.Tecnico;
 @Repository
 public interface TecnicoRepository extends JpaRepository<Tecnico, UUID> {
     List<Tecnico> findByDisponibleTrue();
+
+    Optional<Tecnico> findByIdUsuarioId(UUID usuarioId);
 }
