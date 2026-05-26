@@ -72,10 +72,23 @@ public class AgendamientoServiceImpl implements AgendamientoService {
 
     @Override
     public List<AgendamientoResponsedDTO> findAll(String estado, LocalDate fecha) {
-        LocalDateTime desde = fecha != null ? fecha.atStartOfDay() : null;
-        LocalDateTime hasta = fecha != null ? fecha.atTime(LocalTime.MAX) : null;
-        return agendamientoRepo.findAllFiltrado(estado, desde, hasta)
-            .stream().map(this::toDTO).toList();
+        // Filtramos en Java para evitar problema de inferencia de tipo null
+        // en parámetros LocalDateTime con el pooler de Supabase (prepareThreshold)
+        java.util.stream.Stream<Agendamiento> stream = agendamientoRepo.findAll().stream();
+        if (estado != null && !estado.isBlank()) {
+            stream = stream.filter(a ->
+                a.getIdEstadoAgendamiento() != null &&
+                estado.equals(a.getIdEstadoAgendamiento().getNombre()));
+        }
+        if (fecha != null) {
+            LocalDateTime desde = fecha.atStartOfDay();
+            LocalDateTime hasta = fecha.atTime(LocalTime.MAX);
+            stream = stream.filter(a ->
+                a.getFechaInicio() != null &&
+                !a.getFechaInicio().isBefore(desde) &&
+                !a.getFechaInicio().isAfter(hasta));
+        }
+        return stream.map(this::toDTO).toList();
     }
 
     @Override
@@ -99,7 +112,7 @@ public class AgendamientoServiceImpl implements AgendamientoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se pueden confirmar agendamientos en estado PENDIENTE");
         }
 
-        Tecnico tecnico = tecnicoRepo.findById(tecnicoId)
+        Tecnico tecnico = tecnicoRepo.findByIdUsuario_Id(tecnicoId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Técnico no encontrado"));
 
         if (agendamientoRepo.existeConflictoHorario(tecnicoId, agendamiento.getFechaInicio(), agendamiento.getFechaFin())) {
@@ -185,42 +198,39 @@ public class AgendamientoServiceImpl implements AgendamientoService {
     }
 
     private AgendamientoResponsedDTO toDTO(Agendamiento a) {
-        String nombreCliente = null;
-        String emailCliente = null;
-        if (a.getIdVehiculo() != null && a.getIdVehiculo().getClienteId() != null) {
-            clienteRepo.findById(a.getIdVehiculo().getClienteId()).ifPresent(c -> {});
-            // Se resuelve abajo con variable local
-        }
-
         Cliente cliente = (a.getIdVehiculo() != null && a.getIdVehiculo().getClienteId() != null)
             ? clienteRepo.findById(a.getIdVehiculo().getClienteId()).orElse(null)
             : null;
 
+        String nombreCliente = null;
+        String emailCliente  = null;
         if (cliente != null && cliente.getUsuario() != null) {
             nombreCliente = cliente.getUsuario().getNombre() + " " + cliente.getUsuario().getApellido();
-            emailCliente = cliente.getUsuario().getEmail();
+            emailCliente  = cliente.getUsuario().getEmail();
         }
 
         String nombreTecnico = null;
         if (a.getIdTecnico() != null && a.getIdTecnico().getIdUsuario() != null) {
-            nombreTecnico = a.getIdTecnico().getIdUsuario().getNombre() + " " + a.getIdTecnico().getIdUsuario().getApellido();
+            nombreTecnico = a.getIdTecnico().getIdUsuario().getNombre()
+                          + " " + a.getIdTecnico().getIdUsuario().getApellido();
         }
 
         return new AgendamientoResponsedDTO(
             a.getIdAgendamiento(),
             a.getIdVehiculo() != null ? a.getIdVehiculo().getId() : null,
-            a.getServicio() != null ? a.getServicio().getId() : null,
-            a.getIdEstadoAgendamiento(),
+            a.getServicio()  != null ? a.getServicio().getId()  : null,
+            a.getIdEstadoAgendamiento() != null ? a.getIdEstadoAgendamiento().getNombre() : null,
             a.getFechaInicio(),
             a.getFechaFin(),
             a.getPrecioAcordado() != null ? a.getPrecioAcordado().intValue() : null,
             nombreCliente,
             emailCliente,
             null,
-            a.getIdVehiculo() != null ? a.getIdVehiculo().getPatente() : null,
-            null,
-            null,
-            a.getIdVehiculo() != null && a.getIdVehiculo().getAnio() != null ? a.getIdVehiculo().getAnio().intValue() : null,
+            a.getIdVehiculo() != null ? a.getIdVehiculo().getPatente()  : null,
+            null, // marcaVehiculo — requiere join adicional con marca_vehiculo
+            null, // modeloVehiculo — requiere join adicional con modelo_vehiculo
+            a.getIdVehiculo() != null && a.getIdVehiculo().getAnio() != null
+                ? a.getIdVehiculo().getAnio().intValue() : null,
             nombreTecnico,
             a.getServicio() != null ? a.getServicio().getNombreServicio() : null,
             a.getCreatedAtAgendamiento()
