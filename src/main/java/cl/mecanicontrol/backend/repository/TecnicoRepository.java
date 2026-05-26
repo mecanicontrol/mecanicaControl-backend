@@ -12,5 +12,6 @@ import cl.mecanicontrol.backend.entity.Tecnico;
 @Repository
 public interface TecnicoRepository extends JpaRepository<Tecnico, UUID> {
     List<Tecnico> findByDisponibleTrue();
-    Optional<Tecnico> findByIdUsuario_Id(UUID usuarioId);
+
+    Optional<Tecnico> findByIdUsuarioId(UUID usuarioId);
 }

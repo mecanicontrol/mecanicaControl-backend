@@ -1,64 +1,57 @@
 package cl.mecanicontrol.backend.entity;
 
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
-
 @Entity
-@Table(name = "orden_trabajo")
 @Getter
 @Setter
+@NoArgsConstructor
+@Table(name = "orden_trabajo")
 public class OrdenTrabajo {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id")
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agendamiento_id")
     private Agendamiento agendamiento;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tecnico_id")
     private Tecnico tecnico;
 
-    @ManyToOne
-    @JoinColumn(name = "estado_ot_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "estado_ot_id", nullable = false)
     private EstadoOt estadoOt;
 
-    // Generado por trigger de BD — nunca enviar en INSERT
-    @Column(name = "codigo_ot", nullable = false, unique = true, insertable = false, updatable = false)
+    @Column(name = "codigo_ot", nullable = false, unique = true)
     private String codigoOt;
 
-    @Column(name = "diagnostico")
+    @Column(name = "diagnostico", columnDefinition = "TEXT")
     private String diagnostico;
 
-    @Column(name = "trabajo_realizado")
+    @Column(name = "trabajo_realizado", columnDefinition = "TEXT")
     private String trabajoRealizado;
 
-    @Column(name = "costo_mano_obra")
+    @Column(name = "costo_mano_obra", nullable = false)
     private BigDecimal costoManoObra;
 
-    @Column(name = "costo_repuestos")
+    @Column(name = "costo_repuestos", nullable = false)
     private BigDecimal costoRepuestos;
 
-    // GENERATED ALWAYS AS en BD — no insertar ni actualizar
     @Column(name = "total", insertable = false, updatable = false)
     private BigDecimal total;
 
-    @Column(name = "fecha_inicio")
+    @Column(name = "fecha_inicio", nullable = false)
     private LocalDateTime fechaInicio;
 
     @Column(name = "fecha_cierre")
