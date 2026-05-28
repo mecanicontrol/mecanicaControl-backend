@@ -6,13 +6,14 @@ import cl.mecanicontrol.backend.entity.FaseVehiculo;
 import cl.mecanicontrol.backend.entity.OrdenTrabajo;
 import cl.mecanicontrol.backend.repository.FaseVehiculoRepository;
 import cl.mecanicontrol.backend.repository.OrdenTrabajoRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/seguimiento")
@@ -27,11 +28,27 @@ public class SeguimientoController {
         this.faseVehiculoRepository = faseVehiculoRepository;
     }
 
-    public ResponseEntity<SeguimientoPublicoDTO> seguimiento (@PathVariable String codigoOt){
-        OrdenTrabajo ot = otRepository.findByCodigoOt(codigoOt)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND, "OT no encontrada"));
+    @GetMapping("/{codigoOt}")
+    public ResponseEntity<SeguimientoPublicoDTO> seguimiento(@PathVariable String codigoOt) {
+        OrdenTrabajo ot = otRepository.findByCodigoOtEager(codigoOt)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OT no encontrada"));
+        return ResponseEntity.ok(toSeguimientoDTO(ot));
+    }
 
+    @GetMapping("/agendamiento/{agendamientoId}")
+    public ResponseEntity<SeguimientoPublicoDTO> seguimientoPorAgendamiento(
+            @PathVariable UUID agendamientoId) {
+        OrdenTrabajo ot = otRepository.findByAgendamientoIdAgendamiento(agendamientoId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "No hay OT asociada a este agendamiento"));
+        ot = otRepository.findByCodigoOtEager(ot.getCodigoOt())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OT no encontrada"));
+        return ResponseEntity.ok(toSeguimientoDTO(ot));
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private SeguimientoPublicoDTO toSeguimientoDTO(OrdenTrabajo ot) {
         List<FaseDTO> fases = faseVehiculoRepository.findByOrdenTrabajoId(ot.getId())
                 .stream().map(this::toFaseDTO).toList();
 
@@ -39,27 +56,37 @@ public class SeguimientoController {
                 .filter(f -> f.finAt() == null)
                 .findFirst().orElse(null);
 
-        String vehiculo = ot.getAgendamiento() != null ?
-                ot.getAgendamiento().getIdVehiculo().getPatente() : "N/A";
+        String vehiculo = ot.getAgendamiento() != null && ot.getAgendamiento().getIdVehiculo() != null
+                ? ot.getAgendamiento().getIdVehiculo().getPatente() : "N/A";
 
-        SeguimientoPublicoDTO dto = new SeguimientoPublicoDTO(
+        String nombreServicio = ot.getAgendamiento() != null && ot.getAgendamiento().getServicio() != null
+                ? ot.getAgendamiento().getServicio().getNombreServicio() : null;
+
+        String nombreTecnico = ot.getTecnico() != null && ot.getTecnico().getIdUsuario() != null
+                ? ot.getTecnico().getIdUsuario().getNombre() + " " + ot.getTecnico().getIdUsuario().getApellido()
+                : null;
+
+        return new SeguimientoPublicoDTO(
                 ot.getCodigoOt(),
                 vehiculo,
                 ot.getEstadoOt().getNombre(),
                 fases,
                 faseActual,
-                null
+                null,
+                nombreServicio,
+                nombreTecnico,
+                ot.getFechaInicio(),
+                ot.getTotal(),
+                ot.getCostoManoObra(),
+                ot.getCostoRepuestos()
         );
-
-        return ResponseEntity.ok(dto);
     }
 
-    private FaseDTO toFaseDTO(FaseVehiculo fv){
+    private FaseDTO toFaseDTO(FaseVehiculo fv) {
         Long duracion = null;
-
-        if (fv.getInicioAt() != null && fv.getFinAt() != null) {
+        if (fv.getInicioAt() != null && fv.getFinAt() != null)
             duracion = ChronoUnit.MINUTES.between(fv.getInicioAt(), fv.getFinAt());
-        }
+
         return new FaseDTO(
                 fv.getId(),
                 fv.getFase().getNombre(),

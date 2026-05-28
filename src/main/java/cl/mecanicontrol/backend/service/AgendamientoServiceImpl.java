@@ -93,8 +93,9 @@ public class AgendamientoServiceImpl implements AgendamientoService {
 
     @Override
     public List<AgendamientoResponsedDTO> findByCliente(UUID clienteId) {
+        Cliente cliente = clienteRepo.findById(clienteId).orElse(null);
         return agendamientoRepo.findByClienteId(clienteId)
-            .stream().map(this::toDTO).toList();
+            .stream().map(a -> toDTOWithCliente(a, cliente)).toList();
     }
 
     @Override
@@ -112,7 +113,7 @@ public class AgendamientoServiceImpl implements AgendamientoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se pueden confirmar agendamientos en estado PENDIENTE");
         }
 
-        Tecnico tecnico = tecnicoRepo.findByIdUsuario_Id(tecnicoId)
+        Tecnico tecnico = tecnicoRepo.findByIdUsuarioId(tecnicoId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Técnico no encontrado"));
 
         if (agendamientoRepo.existeConflictoHorario(tecnicoId, agendamiento.getFechaInicio(), agendamiento.getFechaFin())) {
@@ -201,7 +202,10 @@ public class AgendamientoServiceImpl implements AgendamientoService {
         Cliente cliente = (a.getIdVehiculo() != null && a.getIdVehiculo().getClienteId() != null)
             ? clienteRepo.findById(a.getIdVehiculo().getClienteId()).orElse(null)
             : null;
+        return toDTOWithCliente(a, cliente);
+    }
 
+    private AgendamientoResponsedDTO toDTOWithCliente(Agendamiento a, Cliente cliente) {
         String nombreCliente = null;
         String emailCliente  = null;
         if (cliente != null && cliente.getUsuario() != null) {
@@ -227,8 +231,8 @@ public class AgendamientoServiceImpl implements AgendamientoService {
             emailCliente,
             null,
             a.getIdVehiculo() != null ? a.getIdVehiculo().getPatente()  : null,
-            null, // marcaVehiculo — requiere join adicional con marca_vehiculo
-            null, // modeloVehiculo — requiere join adicional con modelo_vehiculo
+            null,
+            null,
             a.getIdVehiculo() != null && a.getIdVehiculo().getAnio() != null
                 ? a.getIdVehiculo().getAnio().intValue() : null,
             nombreTecnico,

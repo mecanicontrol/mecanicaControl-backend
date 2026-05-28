@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/ordenes")
+@RequestMapping("/api/ot")
 public class OrdenTrabajoController {
 
     private final OrdenTrabajoService otService;
@@ -48,16 +48,17 @@ public class OrdenTrabajoController {
     }
 
     @GetMapping("/mis")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TECNICO')")
     public ResponseEntity<List<OTResponseDTO>> misOrdenes(
             @AuthenticationPrincipal UserDetails userDetails){
         UUID tecnicoId = resolverTecnicoId(userDetails.getUsername());
         return ResponseEntity.ok(otService.findAll(null, tecnicoId));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<OTDetalleDTO> findById(@PathVariable UUID id){
-        return ResponseEntity.ok(otService.findById(id));
+    @GetMapping("/{codigoOt}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<OTDetalleDTO> findByCodigoOt(@PathVariable String codigoOt){
+        return ResponseEntity.ok(otService.findByCodigoOt(codigoOt));
     }
 
     @PutMapping("/{id}/tecnico")
@@ -83,8 +84,8 @@ public class OrdenTrabajoController {
     }
 
     private UUID resolverTecnicoId(String email){
-        var usuario =  usuarioRepository.findByEmail(email)
-        .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        var usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         return tecnicoRepository.findByIdUsuarioId(usuario.getId())
                 .orElseThrow(() -> new RuntimeException("Tecnico no encontrado"))
                 .getIdTecnico();

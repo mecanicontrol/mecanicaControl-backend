@@ -11,7 +11,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class OrdenTrabajoService {
@@ -21,19 +25,22 @@ public class OrdenTrabajoService {
     private final TecnicoRepository tecnicoRepository;
     private final AgendamientoRepository agendamientoRepository;
     private final EstadoOtRepository estadoOtRepository;
+    private final ClienteRepository clienteRepository;
 
     public OrdenTrabajoService(OrdenTrabajoRepository otRepository,
                                FaseVehiculoRepository faseVehiculoRepository,
                                FaseRepository faseRepository,
                                TecnicoRepository tecnicoRepository,
                                AgendamientoRepository agendamientoRepository,
-                               EstadoOtRepository estadoOtRepository){
+                               EstadoOtRepository estadoOtRepository,
+                               ClienteRepository clienteRepository){
         this.otRepository = otRepository;
         this.faseVehiculoRepository = faseVehiculoRepository;
         this.faseRepository = faseRepository;
         this.tecnicoRepository = tecnicoRepository;
         this.agendamientoRepository = agendamientoRepository;
         this.estadoOtRepository = estadoOtRepository;
+        this.clienteRepository = clienteRepository;
     }
 
     @Transactional
@@ -60,16 +67,18 @@ public class OrdenTrabajoService {
         otRepository.save(ot);
         crearFasesIniciales(ot);
 
-        return toDTO(ot);
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(ot));
+        return toDTO(ot, clienteNombres);
     }
 
     @Transactional
     public OTResponseDTO asignarTecnico(UUID otId, UUID tecnicoId){
         OrdenTrabajo ot = otRepository.findById(otId).orElseThrow(() -> new RuntimeException("OT no encontrada"));
-
         Tecnico tecnico = tecnicoRepository.findById(tecnicoId).orElseThrow(() -> new RuntimeException("Tecnico no encontrado"));
         ot.setTecnico(tecnico);
-        return toDTO(otRepository.save(ot));
+        OrdenTrabajo saved = otRepository.save(ot);
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(saved));
+        return toDTO(saved, clienteNombres);
     }
 
     @Transactional
@@ -92,7 +101,8 @@ public class OrdenTrabajoService {
         faseActual.setObservaciones(dto.observaciones());
         faseVehiculoRepository.save(faseActual);
 
-        return toDTO(ot);
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(ot));
+        return toDTO(ot, clienteNombres);
     }
 
     @Transactional
@@ -105,26 +115,134 @@ public class OrdenTrabajoService {
         ot.setEstadoOt(estadoCerrada);
         ot.setFechaCierre(LocalDateTime.now());
 
-        return toDTO(otRepository.save(ot));
+        OrdenTrabajo saved = otRepository.save(ot);
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(saved));
+        return toDTO(saved, clienteNombres);
     }
 
     public OTDetalleDTO findById(UUID otId){
-        OrdenTrabajo ot = otRepository.findById(otId).orElseThrow(() -> new RuntimeException("OT no encontrada"));
+        OrdenTrabajo ot = otRepository.findById(otId)
+                .orElseThrow(() -> new RuntimeException("OT no encontrada"));
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(ot));
+        return toDetalleDTO(ot, clienteNombres);
+    }
 
-        List<FaseDTO> fases = faseVehiculoRepository.findByOrdenTrabajoId(otId)
-                .stream().map(this::toFaseDTO).toList();
-
-        return new OTDetalleDTO(toDTO(ot), fases, List.of());
+    public OTDetalleDTO findByCodigoOt(String codigoOt){
+        OrdenTrabajo ot = otRepository.findByCodigoOtEager(codigoOt)
+                .orElseThrow(() -> new RuntimeException("OT no encontrada: " + codigoOt));
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(List.of(ot));
+        return toDetalleDTO(ot, clienteNombres);
     }
 
     public List<OTResponseDTO> findAll(String estado, UUID tecnicoId){
+        List<OrdenTrabajo> ots;
         if (estado != null){
-            return otRepository.findByEstadoOtNombre(estado).stream().map(this::toDTO).toList();
+            ots = otRepository.findByEstadoOtNombreEager(estado);
+        } else if (tecnicoId != null){
+            ots = otRepository.findByTecnicoIdEager(tecnicoId);
+        } else {
+            ots = otRepository.findAllEager();
         }
-        if (tecnicoId != null){
-            return otRepository.findByTecnicoIdTecnico(tecnicoId).stream().map(this::toDTO).toList();
+        Map<UUID, String> clienteNombres = buildClienteNombresMap(ots);
+        return ots.stream().map(ot -> toDTO(ot, clienteNombres)).toList();
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────
+
+    private Map<UUID, String> buildClienteNombresMap(List<OrdenTrabajo> ots) {
+        Set<UUID> clienteIds = ots.stream()
+                .filter(ot -> ot.getAgendamiento() != null && ot.getAgendamiento().getIdVehiculo() != null)
+                .map(ot -> ot.getAgendamiento().getIdVehiculo().getClienteId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (clienteIds.isEmpty()) return Map.of();
+        return clienteRepository.findAllById(clienteIds)
+                .stream()
+                .filter(c -> c.getUsuario() != null)
+                .collect(Collectors.toMap(
+                        Cliente::getId,
+                        c -> c.getUsuario().getNombre() + " " + c.getUsuario().getApellido()
+                ));
+    }
+
+    private String resolverNombreCliente(OrdenTrabajo ot, Map<UUID, String> clienteNombres) {
+        try {
+            UUID clienteId = ot.getAgendamiento().getIdVehiculo().getClienteId();
+            return clienteId != null ? clienteNombres.get(clienteId) : null;
+        } catch (Exception e) {
+            return null;
         }
-        return otRepository.findAll().stream().map(this::toDTO).toList();
+    }
+
+    private OTResponseDTO toDTO(OrdenTrabajo ot, Map<UUID, String> clienteNombres){
+        String vehiculoPatente = null;
+        String nombreServicio  = null;
+        if (ot.getAgendamiento() != null) {
+            if (ot.getAgendamiento().getIdVehiculo() != null)
+                vehiculoPatente = ot.getAgendamiento().getIdVehiculo().getPatente();
+            if (ot.getAgendamiento().getServicio() != null)
+                nombreServicio = ot.getAgendamiento().getServicio().getNombreServicio();
+        }
+
+        String nombreTecnico = ot.getTecnico() != null
+                ? ot.getTecnico().getIdUsuario().getNombre() + " " + ot.getTecnico().getIdUsuario().getApellido()
+                : null;
+
+        return new OTResponseDTO(
+                ot.getId(),
+                ot.getCodigoOt(),
+                ot.getEstadoOt().getNombre(),
+                resolverNombreCliente(ot, clienteNombres),
+                vehiculoPatente,
+                nombreTecnico,
+                nombreServicio,
+                ot.getCostoManoObra(),
+                ot.getCostoRepuestos(),
+                ot.getTotal(),
+                ot.getFechaInicio(),
+                ot.getFechaCierre()
+        );
+    }
+
+    private OTDetalleDTO toDetalleDTO(OrdenTrabajo ot, Map<UUID, String> clienteNombres) {
+        String vehiculoPatente     = null;
+        String vehiculoDescripcion = null;
+        String nombreServicio      = null;
+        if (ot.getAgendamiento() != null) {
+            Vehiculo v = ot.getAgendamiento().getIdVehiculo();
+            if (v != null) {
+                vehiculoPatente = v.getPatente();
+                if (v.getAnio() != null)
+                    vehiculoDescripcion = String.valueOf(v.getAnio());
+            }
+            if (ot.getAgendamiento().getServicio() != null)
+                nombreServicio = ot.getAgendamiento().getServicio().getNombreServicio();
+        }
+
+        String nombreTecnico = ot.getTecnico() != null
+                ? ot.getTecnico().getIdUsuario().getNombre() + " " + ot.getTecnico().getIdUsuario().getApellido()
+                : null;
+
+        List<FaseDTO> fases = faseVehiculoRepository.findByOrdenTrabajoId(ot.getId())
+                .stream().map(this::toFaseDTO).toList();
+
+        return new OTDetalleDTO(
+                ot.getId(),
+                ot.getCodigoOt(),
+                ot.getEstadoOt().getNombre(),
+                resolverNombreCliente(ot, clienteNombres),
+                vehiculoPatente,
+                vehiculoDescripcion,
+                nombreTecnico,
+                nombreServicio,
+                ot.getDiagnostico(),
+                ot.getCostoManoObra(),
+                ot.getCostoRepuestos(),
+                ot.getTotal(),
+                ot.getFechaInicio(),
+                ot.getFechaCierre(),
+                fases
+        );
     }
 
     private void crearFasesIniciales(OrdenTrabajo ot) {
@@ -146,29 +264,6 @@ public class OrdenTrabajoService {
         int anio = LocalDate.now().getYear();
         long count = otRepository.count() + 1;
         return String.format("OT-%d-%04d", anio, count);
-    }
-
-    private OTResponseDTO toDTO(OrdenTrabajo ot){
-        String vehiculo = ot.getAgendamiento() != null ?
-                ot.getAgendamiento().getIdVehiculo().getPatente(): "N/A";
-        String cliente = ot.getAgendamiento() != null ?
-                ot.getAgendamiento().getIdVehiculo().getClienteId().toString(): "N/A";
-        String tecnico = ot.getTecnico() != null ?
-                ot.getTecnico().getIdUsuario().getNombre(): "Sin Asignar";
-
-        return new OTResponseDTO(
-                ot.getId(),
-                ot.getCodigoOt(),
-                vehiculo,
-                cliente,
-                tecnico,
-                ot.getEstadoOt().getNombre(),
-                ot.getCostoManoObra(),
-                ot.getCostoRepuestos(),
-                ot.getTotal(),
-                ot.getFechaInicio(),
-                ot.getFechaCierre()
-        );
     }
 
     private FaseDTO toFaseDTO(FaseVehiculo fv){

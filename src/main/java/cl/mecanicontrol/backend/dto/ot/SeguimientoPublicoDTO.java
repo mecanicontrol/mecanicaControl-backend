@@ -1,5 +1,7 @@
 package cl.mecanicontrol.backend.dto.ot;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record SeguimientoPublicoDTO(
@@ -8,5 +10,11 @@ public record SeguimientoPublicoDTO(
         String estado,
         List<FaseDTO> fases,
         FaseDTO faseActual,
-        PrediccionDTO prediccion
+        PrediccionDTO prediccion,
+        String nombreServicio,
+        String nombreTecnico,
+        LocalDateTime fechaInicio,
+        BigDecimal total,
+        BigDecimal costoManoObra,
+        BigDecimal costoRepuestos
 ) { }

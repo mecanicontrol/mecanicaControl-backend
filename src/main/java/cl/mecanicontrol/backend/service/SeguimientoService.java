@@ -92,7 +92,7 @@ public class SeguimientoService {
         List<Fase> todasFases = faseRepo.findAllByOrderByOrdenAsc();
 
         // Fases ya iniciadas/completadas para esta OT
-        List<FaseVehiculo> fasesOT = faseVehiculoRepo.findByOrdenTrabajo_Id(ot.getId());
+        List<FaseVehiculo> fasesOT = faseVehiculoRepo.findByOrdenTrabajoId(ot.getId());
         Map<UUID, FaseVehiculo> fasesPorFaseId = fasesOT.stream()
             .collect(Collectors.toMap(fv -> fv.getFase().getId(), fv -> fv));
 
