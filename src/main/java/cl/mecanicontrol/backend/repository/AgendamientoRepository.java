@@ -16,7 +16,15 @@ import cl.mecanicontrol.backend.entity.Agendamiento;
 @Repository
 public interface AgendamientoRepository extends JpaRepository<Agendamiento, UUID> {
 
-    @Query("SELECT a FROM Agendamiento a WHERE a.idVehiculo.clienteId = :clienteId")
+    @Query("""
+        SELECT DISTINCT a FROM Agendamiento a
+        LEFT JOIN FETCH a.idVehiculo
+        LEFT JOIN FETCH a.idEstadoAgendamiento
+        LEFT JOIN FETCH a.servicio
+        LEFT JOIN FETCH a.idTecnico t
+        LEFT JOIN FETCH t.idUsuario
+        WHERE a.idVehiculo.clienteId = :clienteId
+        """)
     List<Agendamiento> findByClienteId(@Param("clienteId") UUID clienteId);
 
     @Query("SELECT a FROM Agendamiento a WHERE a.idTecnico.idTecnico = :tecnicoId")

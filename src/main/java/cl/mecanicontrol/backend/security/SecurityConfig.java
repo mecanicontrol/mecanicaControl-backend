@@ -48,6 +48,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/health",
+                                "/error",
                                 "/api/auth/**",
                                 "/api/ia/diagnosticar",
                                 "/api/seguimiento/**",
@@ -59,7 +60,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
                                 "/actuator/**",
-                                "/api/catalogos/**"
+                                "/api/catalogos/**",
+                                "/api/ordenes/**"
                         ).permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/agendamientos").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/cotizaciones").permitAll()
