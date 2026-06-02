@@ -61,7 +61,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/**",
                                 "/api/catalogos/**",
-                                "/api/ordenes/**"
+                                "/api/ordenes/**",
+                                "/api/tienda/**"
                         ).permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/agendamientos").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/cotizaciones").permitAll()

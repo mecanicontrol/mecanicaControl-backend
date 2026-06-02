@@ -38,6 +38,9 @@ public class FaseVehiculo {
     @Column(name = "observaciones", columnDefinition = "TEXT")
     private String observaciones;
 
+    @Column(name = "imagenes", columnDefinition = "TEXT")
+    private String imagenes = "[]";
+
     @Column(name = "inicio_at", nullable = false)
     private LocalDateTime inicioAt;
 

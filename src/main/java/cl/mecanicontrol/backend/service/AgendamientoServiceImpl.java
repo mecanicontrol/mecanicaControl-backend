@@ -14,6 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 import cl.mecanicontrol.backend.dto.AgendamientoRequestDTO;
 import cl.mecanicontrol.backend.dto.AgendamientoResponsedDTO;
 import cl.mecanicontrol.backend.dto.DisponibilidadSlotDTO;
+import cl.mecanicontrol.backend.dto.ot.OTRequestDTO;
+import cl.mecanicontrol.backend.repository.OrdenTrabajoRepository;
 import cl.mecanicontrol.backend.entity.Agendamiento;
 import cl.mecanicontrol.backend.entity.Cliente;
 import cl.mecanicontrol.backend.entity.EstadoAgendamiento;
@@ -40,6 +42,8 @@ public class AgendamientoServiceImpl implements AgendamientoService {
     private final EstadoAgendamientoRepository estadoRepo;
     private final TecnicoRepository tecnicoRepo;
     private final ClienteRepository clienteRepo;
+    private final OrdenTrabajoRepository otRepo;
+    private final OrdenTrabajoService otService;
 
     @Override
     public AgendamientoResponsedDTO crear(AgendamientoRequestDTO request) {
@@ -129,6 +133,17 @@ public class AgendamientoServiceImpl implements AgendamientoService {
 
         Agendamiento guardado = agendamientoRepo.save(agendamiento);
         log.info("Agendamiento {} confirmado con técnico {}", id, tecnicoId);
+
+        // Crear OT automáticamente si no existe ya una para este agendamiento
+        boolean yaExisteOT = otRepo.findByAgendamientoIdAgendamiento(guardado.getIdAgendamiento()).isPresent();
+        if (!yaExisteOT) {
+            try {
+                otService.crear(new OTRequestDTO(guardado.getIdAgendamiento(), tecnico.getIdTecnico()));
+                log.info("OT creada automáticamente para agendamiento {}", id);
+            } catch (Exception e) {
+                log.error("Error al crear OT automática para agendamiento {}: {}", id, e.getMessage());
+            }
+        }
 
         return toDTO(guardado);
     }
