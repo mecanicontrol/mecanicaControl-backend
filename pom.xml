@@ -140,12 +140,11 @@
                         <phase>process-test-resources</phase>
                         <goals><goal>exec</goal></goals>
                         <configuration>
-                            <executable>docker</executable>
+                            <executable>sh</executable>
                             <arguments>
-                                <argument>system</argument>
-                                <argument>info</argument>
+                                <argument>-c</argument>
+                                <argument>docker system info || true</argument>
                             </arguments>
-                            <failOnError>false</failOnError>
                         </configuration>
                     </execution>
                 </executions>
