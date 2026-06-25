@@ -47,7 +47,8 @@ public class UsuarioService {
     public UsuarioResponseDTO getMiPerfil(UUID usuarioId) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return toDTO(usuario);
+        PerfilUsuario perfil = perfilUsuarioRepository.findByUsuarioId(usuarioId).orElse(null);
+        return toDTOConPerfil(usuario, perfil);
     }
 
     public List<UsuarioResponseDTO> findAll() {
@@ -189,7 +190,23 @@ public class UsuarioService {
                 usuario.getApellido(),
                 usuario.getEmail(),
                 usuario.getRol().getNombre(),
-                usuario.isActivo()
+                usuario.isActivo(),
+                null, null, null, null
+        );
+    }
+
+    private UsuarioResponseDTO toDTOConPerfil(Usuario usuario, PerfilUsuario perfil) {
+        return new UsuarioResponseDTO(
+                usuario.getId(),
+                usuario.getNombre(),
+                usuario.getApellido(),
+                usuario.getEmail(),
+                usuario.getRol().getNombre(),
+                usuario.isActivo(),
+                perfil != null ? perfil.getTelefono() : null,
+                perfil != null ? perfil.getRut() : null,
+                perfil != null ? perfil.getDireccion() : null,
+                perfil != null ? perfil.getFotoUrl() : null
         );
     }
 }

@@ -6,6 +6,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -49,35 +50,41 @@ public class AgendamientoServiceImpl implements AgendamientoService {
     public AgendamientoResponsedDTO crear(AgendamientoRequestDTO request) {
         Vehiculo vehiculo = resolverVehiculo(request);
 
-        ServicioCatalogo servicio = servicioRepo.findById(request.idServicio())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado"));
+        List<UUID> idsServicios = request.idServicios();
+        if (idsServicios == null || idsServicios.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Se requiere al menos un servicio");
+        }
+
+        List<ServicioCatalogo> servicios = idsServicios.stream()
+            .map(id -> servicioRepo.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado: " + id)))
+            .toList();
 
         EstadoAgendamiento estadoPendiente = estadoRepo.findByNombre("PENDIENTE")
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Estado PENDIENTE no configurado"));
 
-        LocalDateTime fechaFin = request.fechaInicio().plusMinutes(
-            servicio.getDuracion() != null ? servicio.getDuracion() : 60
-        );
+        int duracionTotal = servicios.stream()
+            .mapToInt(s -> s.getDuracion() != null ? s.getDuracion() : 60)
+            .sum();
 
         Agendamiento agendamiento = new Agendamiento();
         agendamiento.setIdVehiculo(vehiculo);
-        agendamiento.setServicio(servicio);
+        agendamiento.setServicio(servicios.get(0));
+        agendamiento.setServicios(new ArrayList<>(servicios));
         agendamiento.setIdEstadoAgendamiento(estadoPendiente);
         agendamiento.setFechaInicio(request.fechaInicio());
-        agendamiento.setFechaFin(fechaFin);
+        agendamiento.setFechaFin(request.fechaInicio().plusMinutes(duracionTotal));
         agendamiento.setNotaCliente(request.notaCliente());
         agendamiento.setCreatedAtAgendamiento(LocalDateTime.now());
 
         Agendamiento guardado = agendamientoRepo.save(agendamiento);
-        log.info("Agendamiento creado: {}", guardado.getIdAgendamiento());
+        log.info("Agendamiento creado: {} con {} servicio(s)", guardado.getIdAgendamiento(), servicios.size());
 
         return toDTO(guardado);
     }
 
     @Override
     public List<AgendamientoResponsedDTO> findAll(String estado, LocalDate fecha) {
-        // Filtramos en Java para evitar problema de inferencia de tipo null
-        // en parámetros LocalDateTime con el pooler de Supabase (prepareThreshold)
         java.util.stream.Stream<Agendamiento> stream = agendamientoRepo.findAll().stream();
         if (estado != null && !estado.isBlank()) {
             stream = stream.filter(a ->
@@ -134,7 +141,6 @@ public class AgendamientoServiceImpl implements AgendamientoService {
         Agendamiento guardado = agendamientoRepo.save(agendamiento);
         log.info("Agendamiento {} confirmado con técnico {}", id, tecnicoId);
 
-        // Crear OT automáticamente si no existe ya una para este agendamiento
         boolean yaExisteOT = otRepo.findByAgendamientoIdAgendamiento(guardado.getIdAgendamiento()).isPresent();
         if (!yaExisteOT) {
             try {
@@ -174,22 +180,20 @@ public class AgendamientoServiceImpl implements AgendamientoService {
 
     @Override
     public List<DisponibilidadSlotDTO> getDisponibilidad(LocalDate fecha, UUID servicioId) {
-        ServicioCatalogo servicio = servicioRepo.findById(servicioId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado"));
-
-        int duracionMinutos = servicio.getDuracion() != null ? servicio.getDuracion() : 60;
+        int duracionMinutos = 60;
+        if (servicioId != null) {
+            ServicioCatalogo servicio = servicioRepo.findById(servicioId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado"));
+            duracionMinutos = servicio.getDuracion() != null ? servicio.getDuracion() : 60;
+        }
 
         List<DisponibilidadSlotDTO> slots = new ArrayList<>();
         LocalDateTime slotInicio = fecha.atTime(HORA_APERTURA);
 
-        // Slots de 1 hora fija — cualquier servicio puede iniciar antes del cierre.
-        // duracionMinutos solo define el fechaHoraFin para el cálculo de capacidad.
         while (slotInicio.toLocalTime().isBefore(HORA_CIERRE)) {
             LocalDateTime slotFin = slotInicio.plusMinutes(duracionMinutos);
-
             long vehiculosEnTaller = agendamientoRepo.countVehiculosEnTallerEnSlot(slotInicio);
             boolean disponible = vehiculosEnTaller < CAPACIDAD_MAXIMA_DIA;
-
             slots.add(new DisponibilidadSlotDTO(slotInicio.toString(), slotFin.toString(), disponible, null, null));
             slotInicio = slotInicio.plusHours(1);
         }
@@ -198,12 +202,10 @@ public class AgendamientoServiceImpl implements AgendamientoService {
     }
 
     private Vehiculo resolverVehiculo(AgendamientoRequestDTO request) {
-        // Si viene idVehiculo lo usamos directamente
         if (request.idVehiculo() != null) {
             return vehiculoRepo.findById(request.idVehiculo())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehículo no encontrado"));
         }
-        // Si viene patente buscamos por ella
         if (request.patente() != null && !request.patente().isBlank()) {
             return vehiculoRepo.findByPatente(request.patente().toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -234,6 +236,12 @@ public class AgendamientoServiceImpl implements AgendamientoService {
                           + " " + a.getIdTecnico().getIdUsuario().getApellido();
         }
 
+        List<String> nombresServicios = (a.getServicios() != null && !a.getServicios().isEmpty())
+            ? a.getServicios().stream().map(ServicioCatalogo::getNombreServicio).collect(Collectors.toList())
+            : (a.getServicio() != null ? List.of(a.getServicio().getNombreServicio()) : List.of());
+
+        String nombreServicio = nombresServicios.isEmpty() ? null : String.join(" + ", nombresServicios);
+
         return new AgendamientoResponsedDTO(
             a.getIdAgendamiento(),
             a.getIdVehiculo() != null ? a.getIdVehiculo().getId() : null,
@@ -251,8 +259,9 @@ public class AgendamientoServiceImpl implements AgendamientoService {
             a.getIdVehiculo() != null && a.getIdVehiculo().getAnio() != null
                 ? a.getIdVehiculo().getAnio().intValue() : null,
             nombreTecnico,
-            a.getServicio() != null ? a.getServicio().getNombreServicio() : null,
-            a.getCreatedAtAgendamiento()
+            nombreServicio,
+            a.getCreatedAtAgendamiento(),
+            nombresServicios
         );
     }
 }

@@ -14,6 +14,7 @@
     <properties>
         <java.version>17</java.version>
         <lombok.version>1.18.36</lombok.version>
+        <testcontainers.version>1.20.4</testcontainers.version>
     </properties>
     <dependencies>
         <dependency>
@@ -82,6 +83,11 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
@@ -90,17 +96,22 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- TestContainers -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.19.8</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>1.19.8</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -117,6 +128,37 @@
                             <version>1.18.36</version>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>wake-docker</id>
+                        <phase>process-test-resources</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>docker</executable>
+                            <arguments>
+                                <argument>system</argument>
+                                <argument>info</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <DOCKER_HOST>unix:///Users/jo.galvezc/Library/Containers/com.docker.docker/Data/docker-cli.sock</DOCKER_HOST>
+                        <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+                        <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
+                    </environmentVariables>
+                    <argLine>-DDOCKER_API_VERSION=1.44</argLine>
                 </configuration>
             </plugin>
             <plugin>

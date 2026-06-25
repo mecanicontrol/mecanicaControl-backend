@@ -125,4 +125,26 @@ public interface OrdenTrabajoRepository extends JpaRepository<OrdenTrabajo, UUID
         WHERE ot.codigo_ot = :codigoOt
         """, nativeQuery = true)
     List<Object[]> findDetalleByCodigoOt(@Param("codigoOt") String codigoOt);
+
+    // Cuenta vehículos físicamente en el taller (estados activos)
+    @Query("SELECT COUNT(ot) FROM OrdenTrabajo ot WHERE ot.estadoOt.nombre IN ('EN_PROCESO','CONTROL_CALIDAD','LISTA_ENTREGA')")
+    long countVehiculosEnTaller();
+
+    // Fecha estimada de salida más próxima (para calcular próxima disponibilidad)
+    @Query("SELECT MIN(ot.fechaEstimadaSalida) FROM OrdenTrabajo ot WHERE ot.estadoOt.nombre IN ('EN_PROCESO','CONTROL_CALIDAD','LISTA_ENTREGA') AND ot.fechaEstimadaSalida IS NOT NULL")
+    java.time.LocalDateTime findProximaFechaSalida();
+
+    // OTs activas de un técnico (para mostrar carga en modal de asignación)
+    @Query(value = """
+        SELECT ot.codigo_ot, eot.nombre AS estado, v.patente, sc.nombre AS servicio
+        FROM orden_trabajo ot
+        JOIN estado_ot eot ON eot.id = ot.estado_ot_id
+        LEFT JOIN agendamiento a ON a.id = ot.agendamiento_id
+        LEFT JOIN vehiculo v ON v.id = a.vehiculo_id
+        LEFT JOIN servicio_catalogo sc ON sc.id = a.servicio_id
+        WHERE ot.tecnico_id = :tecnicoId
+          AND eot.nombre IN ('ACTIVA','EN_PROCESO','CONTROL_CALIDAD','LISTA_ENTREGA')
+        ORDER BY ot.fecha_inicio ASC
+        """, nativeQuery = true)
+    List<Object[]> findOtActivasByTecnicoId(@Param("tecnicoId") UUID tecnicoId);
 }

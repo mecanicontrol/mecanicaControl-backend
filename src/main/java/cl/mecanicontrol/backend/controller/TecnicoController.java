@@ -8,15 +8,25 @@ import cl.mecanicontrol.backend.entity.Productos;
 import cl.mecanicontrol.backend.entity.RepuestoOT;
 import cl.mecanicontrol.backend.entity.Tecnico;
 import cl.mecanicontrol.backend.entity.Usuario;
+import cl.mecanicontrol.backend.entity.Vehiculo;
+import cl.mecanicontrol.backend.entity.PropuestaDiagnostico;
+import cl.mecanicontrol.backend.entity.PropuestaServicio;
+import cl.mecanicontrol.backend.entity.ServicioCatalogo;
+import cl.mecanicontrol.backend.repository.PropuestaDiagnosticoRepository;
+import cl.mecanicontrol.backend.repository.ServicioCatalogoRepository;
+
+import lombok.extern.slf4j.Slf4j;
 import cl.mecanicontrol.backend.repository.EstadoOtRepository;
 import cl.mecanicontrol.backend.repository.FaseVehiculoRepository;
 import cl.mecanicontrol.backend.repository.OrdenTrabajoRepository;
 import cl.mecanicontrol.backend.repository.PerfilUsuarioRepository;
 import cl.mecanicontrol.backend.repository.ProductosRepository;
 import cl.mecanicontrol.backend.repository.RepuestoOTRepository;
+import cl.mecanicontrol.backend.repository.ClienteRepository;
 import cl.mecanicontrol.backend.repository.TecnicoRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
 import cl.mecanicontrol.backend.service.GroqService;
+import cl.mecanicontrol.backend.service.ResendEmailService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -37,12 +47,14 @@ import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/tecnicos")
 @PreAuthorize("hasRole('TECNICO')")
 public class TecnicoController {
 
     private final UsuarioRepository usuarioRepo;
+    private final ClienteRepository clienteRepo;
     private final TecnicoRepository tecnicoRepo;
     private final PerfilUsuarioRepository perfilRepo;
     private final OrdenTrabajoRepository otRepo;
@@ -51,8 +63,12 @@ public class TecnicoController {
     private final RepuestoOTRepository repuestoRepo;
     private final ProductosRepository productosRepo;
     private final GroqService groqService;
+    private final ResendEmailService emailService;
+    private final PropuestaDiagnosticoRepository propuestaRepo;
+    private final ServicioCatalogoRepository servicioCatalogoRepo;
 
     public TecnicoController(UsuarioRepository usuarioRepo,
+                             ClienteRepository clienteRepo,
                              TecnicoRepository tecnicoRepo,
                              PerfilUsuarioRepository perfilRepo,
                              OrdenTrabajoRepository otRepo,
@@ -60,8 +76,12 @@ public class TecnicoController {
                              FaseVehiculoRepository faseRepo,
                              RepuestoOTRepository repuestoRepo,
                              ProductosRepository productosRepo,
-                             GroqService groqService) {
+                             GroqService groqService,
+                             ResendEmailService emailService,
+                             PropuestaDiagnosticoRepository propuestaRepo,
+                             ServicioCatalogoRepository servicioCatalogoRepo) {
         this.usuarioRepo   = usuarioRepo;
+        this.clienteRepo   = clienteRepo;
         this.tecnicoRepo   = tecnicoRepo;
         this.perfilRepo    = perfilRepo;
         this.otRepo        = otRepo;
@@ -69,7 +89,10 @@ public class TecnicoController {
         this.faseRepo      = faseRepo;
         this.repuestoRepo  = repuestoRepo;
         this.productosRepo = productosRepo;
-        this.groqService   = groqService;
+        this.groqService            = groqService;
+        this.emailService           = emailService;
+        this.propuestaRepo          = propuestaRepo;
+        this.servicioCatalogoRepo   = servicioCatalogoRepo;
     }
 
     @GetMapping("/me")
@@ -384,10 +407,12 @@ public class TecnicoController {
             m.put("nombre",       fv.getFase().getNombre());
             m.put("orden",        fv.getFase().getOrden());
             m.put("estado",       estadoFase);
-            m.put("observaciones", fv.getObservaciones() != null ? fv.getObservaciones() : "");
-            m.put("imagenes",     fv.getImagenes() != null ? fv.getImagenes() : "[]");
-            m.put("inicioAt",     fv.getInicioAt() != null ? fv.getInicioAt().format(fmt) : null);
-            m.put("finAt",        fv.getFinAt() != null ? fv.getFinAt().format(fmt) : null);
+            m.put("observaciones",    fv.getObservaciones() != null ? fv.getObservaciones() : "");
+            m.put("imagenes",         fv.getImagenes() != null ? fv.getImagenes() : "[]");
+            m.put("inicioAt",         fv.getInicioAt() != null ? fv.getInicioAt().format(fmt) : null);
+            m.put("finAt",            fv.getFinAt() != null ? fv.getFinAt().format(fmt) : null);
+            m.put("aprobacionEstado", fv.getAprobacionEstado());
+            m.put("aprobacionNota",   fv.getAprobacionNota());
             result.add(m);
         }
         return ResponseEntity.ok(result);
@@ -428,13 +453,190 @@ public class TecnicoController {
         if (fv.getFinAt() != null)
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La fase ya está completada");
 
+        if ("CONTROL_CALIDAD".equals(fv.getFase().getNombre()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "El control de calidad requiere aprobación del administrador. Use /solicitar-aprobacion");
+
         if (body.containsKey("observaciones"))
             fv.setObservaciones(body.get("observaciones").toString());
         if (body.containsKey("imagenes"))
             fv.setImagenes(body.get("imagenes").toString());
         fv.setFinAt(LocalDateTime.now());
         faseRepo.save(fv);
+
+        // Auto-transiciones de estadoOt según fase completada
+        OrdenTrabajo ot = fv.getOrdenTrabajo();
+        String nombreFase = fv.getFase().getNombre();
+
+        if ("RECEPCION".equals(nombreFase)) {
+            // El auto está físicamente en el taller → EN_PROCESO
+            estadoOtRepo.findByNombre("EN_PROCESO").ifPresent(ot::setEstadoOt);
+            otRepo.save(ot);
+        } else if ("DIAGNOSTICO".equals(nombreFase)) {
+            // Guardar días estimados y calcular fecha estimada de salida
+            if (body.containsKey("diasEstimados")) {
+                try {
+                    int dias = Integer.parseInt(body.get("diasEstimados").toString());
+                    ot.setDiasEstimadosReparacion(dias);
+                    // Sumar días hábiles + 2 días de gracia
+                    LocalDateTime fechaSalida = calcularFechaHabil(LocalDateTime.now(), dias + 2);
+                    ot.setFechaEstimadaSalida(fechaSalida);
+                    otRepo.save(ot);
+                } catch (NumberFormatException ignored) {}
+            }
+        } else if ("LISTO_ENTREGA".equals(nombreFase)) {
+            estadoOtRepo.findByNombre("LISTA_ENTREGA").ifPresent(ot::setEstadoOt);
+            otRepo.save(ot);
+        }
+
+        enviarCorreoFase(fv);
+
         return ResponseEntity.noContent().build();
+    }
+
+    // Confirmar que el cliente retiró su vehículo → estadoOt = COMPLETADA
+    @Transactional
+    @PostMapping("/ordenes/{codigo}/confirmar-retiro")
+    public ResponseEntity<Void> confirmarRetiro(
+            @PathVariable String codigo,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        Tecnico tecnico = resolverTecnico(userDetails.getUsername());
+        OrdenTrabajo ot = otRepo.findByCodigoOt(codigo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada"));
+        verificarPropiedad(ot, tecnico);
+
+        if (!"LISTA_ENTREGA".equals(ot.getEstadoOt().getNombre()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Solo se puede confirmar el retiro cuando el vehículo está en estado LISTA_ENTREGA");
+
+        estadoOtRepo.findByNombre("COMPLETADA").ifPresent(ot::setEstadoOt);
+        if (ot.getFechaCierre() == null) ot.setFechaCierre(LocalDateTime.now());
+        otRepo.save(ot);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Suma {@code dias} días hábiles (lunes-viernes) a partir de {@code desde}. */
+    private LocalDateTime calcularFechaHabil(LocalDateTime desde, int dias) {
+        LocalDateTime fecha = desde;
+        int contados = 0;
+        while (contados < dias) {
+            fecha = fecha.plusDays(1);
+            java.time.DayOfWeek dow = fecha.getDayOfWeek();
+            if (dow != java.time.DayOfWeek.SATURDAY && dow != java.time.DayOfWeek.SUNDAY) {
+                contados++;
+            }
+        }
+        return fecha;
+    }
+
+    @Transactional
+    @PostMapping("/fases/{faseId}/solicitar-aprobacion")
+    public ResponseEntity<Void> solicitarAprobacion(
+            @PathVariable UUID faseId,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        Tecnico tecnico = resolverTecnico(userDetails.getUsername());
+        FaseVehiculo fv = faseRepo.findById(faseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Fase no encontrada"));
+        verificarPropiedad(fv.getOrdenTrabajo(), tecnico);
+
+        if (!"CONTROL_CALIDAD".equals(fv.getFase().getNombre()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo aplica a la fase CONTROL_CALIDAD");
+
+        if (fv.getFinAt() != null)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La fase ya está completada");
+
+        if (body.containsKey("observaciones"))
+            fv.setObservaciones(body.get("observaciones").toString());
+        if (body.containsKey("imagenes"))
+            fv.setImagenes(body.get("imagenes").toString());
+
+        fv.setAprobacionEstado("PENDIENTE");
+        fv.setAprobacionNota(null);
+        faseRepo.save(fv);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    private void enviarCorreoFase(FaseVehiculo fv) {
+        try {
+            OrdenTrabajo ot = fv.getOrdenTrabajo();
+            if (ot.getAgendamiento() == null) return;
+
+            Vehiculo vehiculo = ot.getAgendamiento().getIdVehiculo();
+            if (vehiculo == null || vehiculo.getClienteId() == null) return;
+
+            clienteRepo.findById(vehiculo.getClienteId()).ifPresent(cliente -> {
+                Usuario u = cliente.getUsuario();
+                if (u == null) return;
+                String patente = vehiculo.getPatente() != null ? vehiculo.getPatente() : ot.getCodigoOt();
+                String obs = parsearObsParaEmail(fv.getFase().getNombre(), fv.getObservaciones());
+                emailService.enviarActualizacionFase(
+                    u.getEmail(),
+                    u.getNombre(),
+                    ot.getCodigoOt(),
+                    patente,
+                    fv.getFase().getNombre(),
+                    obs
+                );
+            });
+        } catch (Exception e) {
+            log.warn("No se pudo enviar correo de fase: {}", e.getMessage());
+        }
+    }
+
+    private void enviarCorreoRepuesto(OrdenTrabajo ot, RepuestoOT repuesto) {
+        try {
+            if (ot.getAgendamiento() == null) return;
+            Vehiculo vehiculo = ot.getAgendamiento().getIdVehiculo();
+            if (vehiculo == null || vehiculo.getClienteId() == null) return;
+            clienteRepo.findById(vehiculo.getClienteId()).ifPresent(cliente -> {
+                Usuario u = cliente.getUsuario();
+                if (u == null) return;
+                String patente = vehiculo.getPatente() != null ? vehiculo.getPatente() : ot.getCodigoOt();
+                emailService.enviarNotificacionRepuesto(
+                    u.getEmail(), u.getNombre(),
+                    ot.getCodigoOt(), patente,
+                    repuesto.getNombre(), repuesto.getCantidad(),
+                    repuesto.getPrecioUnitario(), repuesto.getOrigen()
+                );
+            });
+        } catch (Exception e) {
+            log.warn("No se pudo enviar correo de repuesto: {}", e.getMessage());
+        }
+    }
+
+    private String parsearObsParaEmail(String fase, String observaciones) {
+        if (observaciones == null || observaciones.isBlank()) return "";
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+            if ("DIAGNOSTICO".equals(fase)) {
+                com.fasterxml.jackson.databind.JsonNode node = om.readTree(observaciones);
+                StringBuilder sb = new StringBuilder();
+                if (node.has("diagnostico")) sb.append(node.get("diagnostico").asText());
+                if (node.has("serviciosExtra") && node.get("serviciosExtra").isArray()
+                        && node.get("serviciosExtra").size() > 0) {
+                    sb.append("\nServicios adicionales: ");
+                    node.get("serviciosExtra").forEach(s -> sb.append(s.asText()).append(", "));
+                }
+                return sb.toString().trim().replaceAll(",\\s*$", "");
+            }
+            if ("EN_TRABAJO".equals(fase)) {
+                com.fasterxml.jackson.databind.JsonNode arr = om.readTree(observaciones);
+                if (arr.isArray()) {
+                    StringBuilder sb = new StringBuilder();
+                    arr.forEach(e -> {
+                        if (e.has("texto") && !e.get("texto").asText().isBlank())
+                            sb.append("• ").append(e.get("texto").asText()).append("\n");
+                    });
+                    return sb.toString().trim();
+                }
+            }
+        } catch (Exception ignored) {}
+        return observaciones;
     }
 
     // ── Repuestos ─────────────────────────────────────────────────────────────
@@ -495,6 +697,9 @@ public class TecnicoController {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         ot.setCostoRepuestos(totalRepuestos);
         otRepo.save(ot);
+
+        // Notificar al cliente si el repuesto lo debe traer él
+        enviarCorreoRepuesto(ot, saved);
 
         Map<String, Object> resp = new java.util.HashMap<>();
         resp.put("id",             saved.getId().toString());
@@ -579,6 +784,109 @@ public class TecnicoController {
             resp.put("respuesta", "No pude conectarme al asistente en este momento. Intenta nuevamente.");
             return ResponseEntity.ok(resp);
         }
+    }
+
+
+    // ── Propuesta de Diagnóstico ───────────────────────────────────────────────
+
+    @Transactional
+    @PostMapping("/ordenes/{codigo}/propuesta")
+    public ResponseEntity<Map<String, Object>> enviarPropuesta(
+            @PathVariable String codigo,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        Tecnico tecnico = resolverTecnico(userDetails.getUsername());
+        OrdenTrabajo ot = otRepo.findByCodigoOt(codigo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OT no encontrada"));
+        verificarPropiedad(ot, tecnico);
+
+        // Solo puede haber una propuesta activa (no resuelta) por OT
+        propuestaRepo.findByOrdenTrabajoId(ot.getId()).stream()
+                .filter(p -> !List.of("ACEPTADA","ACEPTADA_PARCIAL","RECHAZADA_CLIENTE","RECHAZADA_ADMIN").contains(p.getEstado()))
+                .findFirst()
+                .ifPresent(p -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una propuesta activa para esta OT"); });
+
+        String notaTecnico = body.containsKey("notaTecnico") ? body.get("notaTecnico").toString() : null;
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> serviciosData = (List<Map<String, Object>>) body.get("servicios");
+        if (serviciosData == null || serviciosData.isEmpty())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La propuesta debe incluir al menos un servicio");
+
+        // Identificar IDs de servicios originales del agendamiento
+        java.util.Set<UUID> originales = new java.util.HashSet<>();
+        if (ot.getAgendamiento() != null && ot.getAgendamiento().getServicios() != null) {
+            ot.getAgendamiento().getServicios().forEach(s -> originales.add(s.getId()));
+        }
+
+        PropuestaDiagnostico propuesta = new PropuestaDiagnostico();
+        propuesta.setOrdenTrabajo(ot);
+        propuesta.setNotaTecnico(notaTecnico);
+        propuesta.setTokenCliente(java.util.UUID.randomUUID().toString().replace("-", ""));
+
+        for (Map<String, Object> sd : serviciosData) {
+            UUID servicioId = UUID.fromString(sd.get("servicioId").toString());
+            String descripcion = sd.getOrDefault("descripcion", "").toString();
+            String imagenes = sd.containsKey("imagenes") ? sd.get("imagenes").toString() : "[]";
+
+            ServicioCatalogo servicio = servicioCatalogoRepo.findById(servicioId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Servicio no encontrado: " + servicioId));
+
+            PropuestaServicio ps = new PropuestaServicio();
+            ps.setPropuesta(propuesta);
+            ps.setServicio(servicio);
+            ps.setDescripcion(descripcion);
+            ps.setImagenes(imagenes);
+            ps.setIncluidoEnOriginal(originales.contains(servicioId));
+            propuesta.getServicios().add(ps);
+        }
+
+        propuestaRepo.save(propuesta);
+
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("propuestaId", propuesta.getId().toString());
+        resp.put("estado", propuesta.getEstado());
+        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+    }
+
+    @GetMapping("/ordenes/{codigo}/propuesta")
+    public ResponseEntity<Map<String, Object>> verPropuesta(
+            @PathVariable String codigo,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        Tecnico tecnico = resolverTecnico(userDetails.getUsername());
+        OrdenTrabajo ot = otRepo.findByCodigoOt(codigo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OT no encontrada"));
+        verificarPropiedad(ot, tecnico);
+
+        return propuestaRepo.findByOrdenTrabajoId(ot.getId()).stream()
+                .findFirst()
+                .map(p -> ResponseEntity.ok(propuestaToMap(p)))
+                .orElse(ResponseEntity.ok(null));
+    }
+
+    private Map<String, Object> propuestaToMap(PropuestaDiagnostico p) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("id", p.getId().toString());
+        m.put("estado", p.getEstado());
+        m.put("notaTecnico", p.getNotaTecnico());
+        m.put("notaAdmin", p.getNotaAdmin());
+        m.put("notaCliente", p.getNotaCliente());
+        m.put("creadoAt", p.getCreadoAt() != null ? p.getCreadoAt().toString() : null);
+        m.put("servicios", p.getServicios().stream().map(ps -> {
+            Map<String, Object> sm = new java.util.LinkedHashMap<>();
+            sm.put("id", ps.getId().toString());
+            sm.put("servicioId", ps.getServicio().getId().toString());
+            sm.put("nombre", ps.getServicio().getNombreServicio());
+            sm.put("precioBase", ps.getServicio().getPrecioBase());
+            sm.put("descripcion", ps.getDescripcion());
+            sm.put("imagenes", ps.getImagenes());
+            sm.put("incluidoEnOriginal", ps.getIncluidoEnOriginal());
+            sm.put("aceptadoPorCliente", ps.getAceptadoPorCliente());
+            return sm;
+        }).toList());
+        return m;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

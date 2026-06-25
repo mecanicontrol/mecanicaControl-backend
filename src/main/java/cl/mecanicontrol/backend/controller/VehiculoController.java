@@ -15,6 +15,7 @@ import cl.mecanicontrol.backend.repository.NivelFidelizacionRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
 import cl.mecanicontrol.backend.repository.VehiculoRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -114,7 +115,12 @@ public class VehiculoController {
             v.setKilometrajeIngreso(request.kilometraje());
         if (request.alias() != null)
             v.setAlias(request.alias());
-        vehiculoRepo.save(v);
+        try {
+            vehiculoRepo.save(v);
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Ya existe un vehículo registrado con la patente " + v.getPatente());
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(toDTO(v));
     }

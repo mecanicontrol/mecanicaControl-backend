@@ -80,7 +80,7 @@ class AgendamientoServiceTest {
         // Arrange
         AgendamientoRequestDTO request = new AgendamientoRequestDTO(
             vehiculoId,
-            servicioId,
+            List.of(servicioId),
             LocalDateTime.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0),
             "Sin notas",
             null
@@ -95,7 +95,6 @@ class AgendamientoServiceTest {
         when(servicioRepo.findById(servicioId)).thenReturn(Optional.of(servicio));
         when(estadoRepo.findByNombre("PENDIENTE")).thenReturn(Optional.of(estadoPendiente));
         when(agendamientoRepo.save(any(Agendamiento.class))).thenReturn(agendamientoGuardado);
-        when(clienteRepo.findById(any())).thenReturn(Optional.empty());
 
         // Act
         AgendamientoResponsedDTO result = agendamientoService.crear(request);
@@ -146,7 +145,6 @@ class AgendamientoServiceTest {
         when(agendamientoRepo.findById(agendamientoId)).thenReturn(Optional.of(agendamiento));
         when(estadoRepo.findByNombre("CANCELADO")).thenReturn(Optional.of(estadoCancelado));
         when(agendamientoRepo.save(any(Agendamiento.class))).thenReturn(agendamientoCancelado);
-        when(clienteRepo.findById(any())).thenReturn(Optional.empty());
 
         // Act
         AgendamientoResponsedDTO result = agendamientoService.cancelar(agendamientoId);

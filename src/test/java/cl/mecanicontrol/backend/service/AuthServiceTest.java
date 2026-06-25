@@ -11,7 +11,11 @@ import cl.mecanicontrol.backend.repository.PerfilUsuarioRepository;
 import cl.mecanicontrol.backend.repository.RolRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
 import cl.mecanicontrol.backend.repository.VehiculoRepository;
+import cl.mecanicontrol.backend.repository.VerificacionEmailRepository;
 import cl.mecanicontrol.backend.security.JwtUtil;
+import cl.mecanicontrol.backend.dto.auth.RegisterConVehiculoRequestDTO;
+import cl.mecanicontrol.backend.entity.Cliente;
+import cl.mecanicontrol.backend.entity.NivelFidelizacion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,6 +55,8 @@ class AuthServiceTest {
     @Mock JwtUtil jwtUtil;
     @Mock AuthenticationManager authenticationManager;
     @Mock UserDetailsService userDetailsService;
+    @Mock VerificacionEmailRepository verificacionEmailRepository;
+    @Mock ResendEmailService emailService;
 
     @InjectMocks
     AuthService authService;
@@ -148,5 +154,36 @@ class AuthServiceTest {
 
         assertThat(ex.getMessage()).contains("email");
         verify(usuarioRepository, never()).save(any());
+    }
+    // ── TU-AUTH-05 ────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("TU-AUTH-05: registerConVehiculo con fallo al guardar vehículo propaga excepción (rollback)")
+    void registroConVehiculo_falloAlGuardarVehiculo_propagaExcepcion() {
+        // Arrange
+        Rol rolCliente = new Rol();
+        rolCliente.setNombre("CLIENTE");
+
+        NivelFidelizacion nivel = new NivelFidelizacion();
+        Cliente clienteGuardado = new Cliente();
+
+        when(usuarioRepository.existsByEmail("nuevo@test.com")).thenReturn(false);
+        when(rolRepository.findByNombre("CLIENTE")).thenReturn(Optional.of(rolCliente));
+        when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(perfilUsuarioRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(nivelFidelizacionRepository.findAll()).thenReturn(List.of(nivel));
+        when(clienteRepository.save(any())).thenReturn(clienteGuardado);
+        when(vehiculoRepository.save(any())).thenThrow(new RuntimeException("DB constraint violation"));
+
+        RegisterConVehiculoRequestDTO request = new RegisterConVehiculoRequestDTO(
+            "Nuevo", "Usuario", "nuevo@test.com", "+56912345678",
+            "Admin123!", "AB1234", null, null, 2020, 50000
+        );
+
+        // Act + Assert — la excepción del vehículo debe propagarse
+        assertThrows(RuntimeException.class, () -> authService.registerConVehiculo(request));
+
+        // El email NO debe haberse enviado (transacción no completada)
+        verify(emailService, never()).enviarVerificacion(anyString(), anyString(), anyString());
     }
 }

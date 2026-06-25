@@ -39,7 +39,20 @@ public class DiagnosticoServiceImpl implements DiagnosticoService {
         String prompt = construirPrompt(request, catalogo);
 
         // 3. Llamar a Groq
-        String respuestaRaw = groqService.llamar(prompt);
+        String respuestaRaw;
+        try {
+            respuestaRaw = groqService.llamar(prompt);
+        } catch (Exception e) {
+            log.error("Error al contactar Groq API: {}", e.getMessage());
+            return new DiagnosticoResponseDTO(
+                "No se pudo procesar el diagnóstico automáticamente.",
+                "NORMAL",
+                "Te recomendamos visitar el taller para una revisión presencial.",
+                List.of(),
+                request.patente(), request.marca(), request.modelo(),
+                request.anio(), request.kilometraje()
+            );
+        }
 
         // 4. Parsear la respuesta JSON y enriquecer con datos del vehículo
         DiagnosticoResponseDTO response = parsearRespuesta(respuestaRaw, request);

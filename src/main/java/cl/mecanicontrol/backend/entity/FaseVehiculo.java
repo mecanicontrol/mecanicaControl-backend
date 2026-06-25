@@ -46,4 +46,10 @@ public class FaseVehiculo {
 
     @Column(name = "fin_at")
     private LocalDateTime finAt;
+
+    @Column(name = "aprobacion_estado", length = 20)
+    private String aprobacionEstado;
+
+    @Column(name = "aprobacion_nota", columnDefinition = "TEXT")
+    private String aprobacionNota;
 }

@@ -1,8 +1,12 @@
 package cl.mecanicontrol.backend.controller;
 
 import cl.mecanicontrol.backend.entity.Productos;
+import cl.mecanicontrol.backend.entity.PedidoTienda;
 import cl.mecanicontrol.backend.repository.ProductosRepository;
+import cl.mecanicontrol.backend.service.PedidoTiendaService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -15,9 +19,26 @@ import java.util.stream.Collectors;
 public class TiendaController {
 
     private final ProductosRepository productosRepo;
+    private final PedidoTiendaService pedidoService;
 
-    public TiendaController(ProductosRepository productosRepo) {
+    public TiendaController(ProductosRepository productosRepo, PedidoTiendaService pedidoService) {
         this.productosRepo = productosRepo;
+        this.pedidoService = pedidoService;
+    }
+
+    @PostMapping("/pedido")
+    public ResponseEntity<Map<String, Object>> registrarPedido(
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        String email = userDetails != null ? userDetails.getUsername() : null;
+        PedidoTienda pedido = pedidoService.registrar(body, email);
+        Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("id",            pedido.getId().toString());
+        resp.put("numeroPedido",  pedido.getNumeroPedido());
+        resp.put("fecha",         pedido.getFecha().toString());
+        resp.put("total",         pedido.getTotal());
+        resp.put("ok",            true);
+        return ResponseEntity.ok(resp);
     }
 
     @GetMapping("/productos")

@@ -27,7 +27,9 @@ import cl.mecanicontrol.backend.entity.Usuario;
 import cl.mecanicontrol.backend.repository.ClienteRepository;
 import cl.mecanicontrol.backend.repository.TecnicoRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
+import cl.mecanicontrol.backend.repository.OrdenTrabajoRepository;
 import cl.mecanicontrol.backend.service.AgendamientoService;
+import cl.mecanicontrol.backend.service.ConfiguracionService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -39,6 +41,8 @@ public class AgendamientoController {
     private final UsuarioRepository usuarioRepo;
     private final ClienteRepository clienteRepo;
     private final TecnicoRepository tecnicoRepo;
+    private final OrdenTrabajoRepository otRepo;
+    private final ConfiguracionService configuracionService;
 
     // POST /api/agendamientos — público, cliente agenda sin necesidad de JWT
     @PostMapping("/agendamientos")
@@ -93,14 +97,54 @@ public class AgendamientoController {
     @GetMapping("/disponibilidad")
     public ResponseEntity<List<DisponibilidadSlotDTO>> getDisponibilidad(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
-            @RequestParam UUID servicioId) {
+            @RequestParam(required = false) UUID servicioId) {
         return ResponseEntity.ok(agendamientoService.getDisponibilidad(fecha, servicioId));
     }
 
+
+    // GET /api/taller/estado — público, retorna ocupación actual y próxima disponibilidad
+    @GetMapping("/taller/estado")
+    public ResponseEntity<java.util.Map<String, Object>> estadoTaller() {
+        long enTaller  = otRepo.countVehiculosEnTaller();
+        int  capacidad = configuracionService.getCapacidadMaximaTaller();
+        java.time.LocalDateTime proxima = otRepo.findProximaFechaSalida();
+        java.util.Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("vehiculosEnTaller", enTaller);
+        resp.put("capacidadMaxima",   capacidad);
+        resp.put("disponibles",       Math.max(0, capacidad - enTaller));
+        resp.put("tallerLleno",       enTaller >= capacidad);
+        resp.put("proximaDisponibilidad", proxima != null ? proxima.toLocalDate().toString() : null);
+        return ResponseEntity.ok(resp);
+    }
+
+    // GET /api/admin/tecnicos/carga — admin: OTs activas por técnico
+    @GetMapping("/admin/tecnicos/carga")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> cargaTecnicos() {
+        var tecnicos = tecnicoRepo.findAll();
+        var result = tecnicos.stream().map(t -> {
+            var ots = otRepo.findOtActivasByTecnicoId(t.getIdTecnico());
+            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("tecnicoId", t.getIdTecnico().toString());
+            String nombre = t.getIdUsuario() != null
+                ? t.getIdUsuario().getNombre() + " " + t.getIdUsuario().getApellido() : "";
+            m.put("nombre", nombre.trim());
+            m.put("otActivas", ots.size());
+            m.put("vehiculos", ots.stream().map(row -> {
+                java.util.Map<String, Object> v = new java.util.LinkedHashMap<>();
+                v.put("codigo",   row[0] != null ? row[0].toString() : "");
+                v.put("estado",   row[1] != null ? row[1].toString() : "");
+                v.put("patente",  row[2] != null ? row[2].toString() : "");
+                v.put("servicio", row[3] != null ? row[3].toString() : "");
+                return v;
+            }).toList());
+            return m;
+        }).toList();
+        return ResponseEntity.ok(result);
+    }
+
     private UUID resolverClienteId(String email) {
-        Usuario usuario = usuarioRepo.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return clienteRepo.findByUsuarioId(usuario.getId())
+        return clienteRepo.findByUsuarioEmail(email)
             .orElseThrow(() -> new RuntimeException("Cliente no encontrado"))
             .getId();
     }
@@ -108,9 +152,7 @@ public class AgendamientoController {
     private UUID resolverTecnicoId(String email) {
         Usuario usuario = usuarioRepo.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return tecnicoRepo.findAll().stream()
-            .filter(t -> t.getIdUsuario() != null && t.getIdUsuario().getId().equals(usuario.getId()))
-            .findFirst()
+        return tecnicoRepo.findByIdUsuarioId(usuario.getId())
             .orElseThrow(() -> new RuntimeException("Técnico no encontrado"))
             .getIdTecnico();
     }
