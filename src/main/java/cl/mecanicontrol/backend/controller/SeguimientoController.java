@@ -90,12 +90,15 @@ public class SeguimientoController {
         return new FaseDTO(
                 fv.getId(),
                 fv.getFase().getNombre(),
-                fv.getFase().getOrden(),
+                (int) fv.getFase().getOrden(),
                 fv.getChecklistJson(),
                 fv.getObservaciones(),
+                fv.getImagenes(),
                 fv.getInicioAt(),
                 fv.getFinAt(),
-                duracion
+                duracion,
+                fv.getAprobacionEstado(),
+                fv.getAprobacionNota()
         );
     }
 }

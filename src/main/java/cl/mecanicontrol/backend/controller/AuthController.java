@@ -7,10 +7,9 @@ import cl.mecanicontrol.backend.dto.auth.RegisterRequestDTO;
 import cl.mecanicontrol.backend.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,12 +27,20 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request){
-        return ResponseEntity.status(201).body(authService.register(request));
+    public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequestDTO request){
+        authService.register(request);
+        return ResponseEntity.status(201).body(Map.of("mensaje", "Revisa tu correo para verificar tu cuenta"));
     }
 
     @PostMapping("/register-con-vehiculo")
-    public ResponseEntity<AuthResponseDTO> registerConVehiculo(@Valid @RequestBody RegisterConVehiculoRequestDTO request){
-        return ResponseEntity.status(201).body(authService.registerConVehiculo(request));
+    public ResponseEntity<Map<String, String>> registerConVehiculo(@Valid @RequestBody RegisterConVehiculoRequestDTO request){
+        authService.registerConVehiculo(request);
+        return ResponseEntity.status(201).body(Map.of("mensaje", "Revisa tu correo para verificar tu cuenta"));
+    }
+
+    @GetMapping("/verificar")
+    public ResponseEntity<Map<String, String>> verificarEmail(@RequestParam String token) {
+        authService.verificarEmail(token);
+        return ResponseEntity.ok(Map.of("mensaje", "Correo verificado correctamente. Ya puedes iniciar sesión."));
     }
 }

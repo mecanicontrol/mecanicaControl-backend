@@ -9,7 +9,10 @@ public record FaseDTO(
         int orden,
         String checklistJson,
         String observaciones,
+        String imagenes,
         LocalDateTime inicioAt,
         LocalDateTime finAt,
-        Long duracionMinutos
+        Long duracionMinutos,
+        String aprobacionEstado,
+        String aprobacionNota
 ) { }

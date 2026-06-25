@@ -10,25 +10,39 @@ import cl.mecanicontrol.backend.entity.PerfilUsuario;
 import cl.mecanicontrol.backend.entity.Rol;
 import cl.mecanicontrol.backend.entity.Usuario;
 import cl.mecanicontrol.backend.entity.Vehiculo;
+import cl.mecanicontrol.backend.entity.VerificacionEmail;
 import cl.mecanicontrol.backend.repository.ClienteRepository;
 import cl.mecanicontrol.backend.repository.NivelFidelizacionRepository;
 import cl.mecanicontrol.backend.repository.PerfilUsuarioRepository;
 import cl.mecanicontrol.backend.repository.RolRepository;
 import cl.mecanicontrol.backend.repository.UsuarioRepository;
 import cl.mecanicontrol.backend.repository.VehiculoRepository;
+import cl.mecanicontrol.backend.repository.VerificacionEmailRepository;
 import cl.mecanicontrol.backend.security.JwtUtil;
 import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
+    @Value("${app.test.auto-activate-users:false}")
+    private boolean autoActivateUsers;
 
     private final UsuarioRepository usuarioRepository;
     private final PerfilUsuarioRepository perfilUsuarioRepository;
@@ -36,6 +50,8 @@ public class AuthService {
     private final ClienteRepository clienteRepository;
     private final NivelFidelizacionRepository nivelFidelizacionRepository;
     private final VehiculoRepository vehiculoRepository;
+    private final VerificacionEmailRepository verificacionEmailRepository;
+    private final ResendEmailService emailService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -47,6 +63,8 @@ public class AuthService {
                        ClienteRepository clienteRepository,
                        NivelFidelizacionRepository nivelFidelizacionRepository,
                        VehiculoRepository vehiculoRepository,
+                       VerificacionEmailRepository verificacionEmailRepository,
+                       ResendEmailService emailService,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        AuthenticationManager authenticationManager,
@@ -57,6 +75,8 @@ public class AuthService {
         this.clienteRepository = clienteRepository;
         this.nivelFidelizacionRepository = nivelFidelizacionRepository;
         this.vehiculoRepository = vehiculoRepository;
+        this.verificacionEmailRepository = verificacionEmailRepository;
+        this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.authenticationManager = authenticationManager;
@@ -83,7 +103,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponseDTO register(RegisterRequestDTO request){
+    public void register(RegisterRequestDTO request){
         if(usuarioRepository.existsByEmail(request.email())){
             throw new RuntimeException("El email ya se encuentra registrado");
         }
@@ -97,7 +117,7 @@ public class AuthService {
         usuario.setEmail(request.email());
         usuario.setPasswordHash(passwordEncoder.encode(request.password()));
         usuario.setRol(rol);
-        usuario.setActivo(true);
+        usuario.setActivo(autoActivateUsers);
 
         usuarioRepository.save(usuario);
 
@@ -105,19 +125,13 @@ public class AuthService {
         perfil.setUsuario(usuario);
         perfilUsuarioRepository.save(perfil);
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.email());
-        String token = jwtUtil.generateToken(userDetails);
-
-        return new AuthResponseDTO(
-                token,
-                usuario.getRol().getNombre(),
-                usuario.getId(),
-                usuario.getNombre()
-        );
+        if (!autoActivateUsers) {
+            enviarTokenVerificacion(usuario);
+        }
     }
 
     @Transactional
-    public AuthResponseDTO registerConVehiculo(RegisterConVehiculoRequestDTO request) {
+    public void registerConVehiculo(RegisterConVehiculoRequestDTO request) {
         if (usuarioRepository.existsByEmail(request.email())) {
             throw new RuntimeException("El email ya se encuentra registrado");
         }
@@ -131,7 +145,7 @@ public class AuthService {
         usuario.setEmail(request.email());
         usuario.setPasswordHash(passwordEncoder.encode(request.password()));
         usuario.setRol(rol);
-        usuario.setActivo(true);
+        usuario.setActivo(autoActivateUsers);
         usuarioRepository.save(usuario);
 
         PerfilUsuario perfil = new PerfilUsuario();
@@ -168,14 +182,42 @@ public class AuthService {
             vehiculoRepository.save(vehiculo);
         }
 
-        UserDetails userDetails = userDetailsService.loadUserByUsername(request.email());
-        String token = jwtUtil.generateToken(userDetails);
+        if (!autoActivateUsers) {
+            enviarTokenVerificacion(usuario);
+        }
+    }
 
-        return new AuthResponseDTO(
-                token,
-                usuario.getRol().getNombre(),
-                usuario.getId(),
-                usuario.getNombre()
-        );
+    @Transactional
+    public void verificarEmail(String token) {
+        VerificacionEmail vt = verificacionEmailRepository.findByToken(token)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Token inválido"));
+
+        if (vt.isUsado())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El token ya fue utilizado");
+
+        if (vt.getExpiraAt().isBefore(LocalDateTime.now()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El token ha expirado");
+
+        Usuario usuario = vt.getUsuario();
+        usuario.setActivo(true);
+        usuarioRepository.save(usuario);
+
+        vt.setUsado(true);
+        verificacionEmailRepository.save(vt);
+    }
+
+    private void enviarTokenVerificacion(Usuario usuario) {
+        byte[] bytes = new byte[48];
+        new SecureRandom().nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+
+        VerificacionEmail vt = new VerificacionEmail();
+        vt.setUsuario(usuario);
+        vt.setToken(token);
+        vt.setExpiraAt(LocalDateTime.now().plusHours(24));
+        verificacionEmailRepository.save(vt);
+
+        String url = frontendUrl + "/verificar-email?token=" + token;
+        emailService.enviarVerificacion(usuario.getEmail(), usuario.getNombre(), url);
     }
 }

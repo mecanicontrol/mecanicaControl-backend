@@ -56,7 +56,15 @@ public class OrdenTrabajoService {
         ot.setEstadoOt(estadoInicial);
         ot.setCodigoOt(generarCodigo());
         ot.setFechaInicio(LocalDateTime.now());
-        ot.setCostoManoObra(BigDecimal.ZERO);
+        // costoManoObra = suma de precioBase de todos los servicios del agendamiento
+        BigDecimal costoServicios = agendamiento.getServicios() != null && !agendamiento.getServicios().isEmpty()
+            ? agendamiento.getServicios().stream()
+                .map(s -> s.getPrecioBase() != null ? s.getPrecioBase() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+            : (agendamiento.getServicio() != null && agendamiento.getServicio().getPrecioBase() != null
+                ? agendamiento.getServicio().getPrecioBase()
+                : BigDecimal.ZERO);
+        ot.setCostoManoObra(costoServicios);
         ot.setCostoRepuestos(BigDecimal.ZERO);
 
         if (dto.tecnicoId() != null){
@@ -95,6 +103,10 @@ public class OrdenTrabajoService {
                 .filter(f -> f.getFinAt() == null)
                 .min((a, b) -> a.getFase().getOrden().compareTo(b.getFase().getOrden()))
                 .orElseThrow(() -> new RuntimeException("No existe fase activa"));
+
+        if (dto.checklistJson() == null || dto.checklistJson().isBlank()) {
+            throw new RuntimeException("El checklist es obligatorio para completar la fase");
+        }
 
         faseActual.setFinAt(LocalDateTime.now());
         faseActual.setChecklistJson(dto.checklistJson());
@@ -274,12 +286,15 @@ public class OrdenTrabajoService {
         return new FaseDTO(
                 fv.getId(),
                 fv.getFase().getNombre(),
-                fv.getFase().getOrden(),
+                (int) fv.getFase().getOrden(),
                 fv.getChecklistJson(),
                 fv.getObservaciones(),
+                fv.getImagenes(),
                 fv.getInicioAt(),
                 fv.getFinAt(),
-                duracion
+                duracion,
+                fv.getAprobacionEstado(),
+                fv.getAprobacionNota()
         );
     }
 }

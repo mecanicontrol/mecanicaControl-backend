@@ -9,4 +9,6 @@ public interface ModeloVehiculoService {
     List<ModeloVehiculo> findAll();
     List<ModeloVehiculo> findByMarcaId(UUID idMarca);
     ModeloVehiculo saveModelo(ModeloVehiculo modeloVehiculo);
+    ModeloVehiculo updateModelo(UUID id, String nombre, UUID marcaId);
+    void deleteModelo(UUID id);
 }

@@ -44,7 +44,7 @@ class AuthIntegrationTest {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        // Supabase usa prepareThreshold=0 en prod; aquí usamos JDBC directo
+        postgres.start();
         registry.add("spring.datasource.url", () ->
             postgres.getJdbcUrl() + "?prepareThreshold=0");
         registry.add("spring.datasource.username", postgres::getUsername);

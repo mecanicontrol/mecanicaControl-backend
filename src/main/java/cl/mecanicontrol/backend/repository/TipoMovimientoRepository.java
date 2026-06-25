@@ -8,4 +8,5 @@ import java.util.UUID;
 
 @Repository
 public interface TipoMovimientoRepository extends JpaRepository<TipoMovimiento, UUID> {
+    java.util.Optional<TipoMovimiento> findByNombreIgnoreCase(String nombre);
 }

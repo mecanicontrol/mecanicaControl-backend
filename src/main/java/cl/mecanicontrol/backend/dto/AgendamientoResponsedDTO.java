@@ -1,6 +1,7 @@
 package cl.mecanicontrol.backend.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record AgendamientoResponsedDTO(
@@ -20,6 +21,6 @@ public record AgendamientoResponsedDTO(
     Integer anioVehiculo,
     String nombreTecnico,
     String nombreServicio,
-    LocalDateTime createdAtAgendamiento
-
+    LocalDateTime createdAtAgendamiento,
+    List<String> nombresServicios
 ) {}
