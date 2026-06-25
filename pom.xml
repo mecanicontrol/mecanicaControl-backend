@@ -145,6 +145,7 @@
                                 <argument>system</argument>
                                 <argument>info</argument>
                             </arguments>
+                            <failOnError>false</failOnError>
                         </configuration>
                     </execution>
                 </executions>
