@@ -47,7 +47,8 @@ public class ClienteService {
                 cliente.getUsuario().getApellido(),
                 cliente.getUsuario().getEmail(),
                 cliente.getUsuario().getRol().getNombre(),
-                cliente.getUsuario().isActivo()
+                cliente.getUsuario().isActivo(),
+                null, null, null, null
         );
 
         return new ClienteResponseDTO(

@@ -59,4 +59,10 @@ public class OrdenTrabajo {
 
     @Column(name = "aprobada_at")
     private LocalDateTime aprobadaAt;
+
+    @Column(name = "dias_estimados_reparacion")
+    private Integer diasEstimadosReparacion;
+
+    @Column(name = "fecha_estimada_salida")
+    private LocalDateTime fechaEstimadaSalida;
 }

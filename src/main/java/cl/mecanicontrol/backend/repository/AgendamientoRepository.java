@@ -42,6 +42,13 @@ public interface AgendamientoRepository extends JpaRepository<Agendamiento, UUID
     @Query("SELECT a FROM Agendamiento a WHERE a.idEstadoAgendamiento.nombre = 'CONFIRMADO' AND a.fechaInicio >= :desde AND a.fechaInicio < :hasta")
     List<Agendamiento> findConfirmadosEnFecha(@Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
 
+    @Query("""
+        SELECT a FROM Agendamiento a
+        WHERE a.fechaFin < :ahora
+          AND a.idEstadoAgendamiento.nombre NOT IN ('COMPLETADO', 'CANCELADO')
+        """)
+    List<Agendamiento> findVencidosSinCompletar(@Param("ahora") LocalDateTime ahora);
+
     /**
      * Cuenta vehículos que físicamente estarán en el taller en el slot dado.
      * Prioridad de hora de término:

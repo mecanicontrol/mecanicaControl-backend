@@ -8,5 +8,9 @@ public record UsuarioResponseDTO(
         String apellido,
         String email,
         String rol,
-        Boolean activo
+        Boolean activo,
+        String telefono,
+        String rut,
+        String direccion,
+        String fotoUrl
 ) {}
