@@ -58,7 +58,8 @@ public class AdminPropuestasController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Solo se pueden aprobar propuestas PENDIENTE_ADMIN");
 
-        String nota = body != null && body.containsKey("nota") ? body.get("nota").toString() : null;
+        Object notaVal = (body != null) ? body.get("nota") : null;
+        String nota = (notaVal != null) ? notaVal.toString() : null;
         p.setNotaAdmin(nota);
         p.setEstado("ENVIADA_CLIENTE");
         propuestaRepo.save(p);
@@ -75,7 +76,8 @@ public class AdminPropuestasController {
         PropuestaDiagnostico p = propuestaRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        p.setNotaAdmin(body.containsKey("nota") ? body.get("nota").toString() : "Sin nota");
+        Object notaValR = body.get("nota");
+        p.setNotaAdmin(notaValR != null ? notaValR.toString() : "Sin nota");
         p.setEstado("RECHAZADA_ADMIN");
         p.setResueltoAt(LocalDateTime.now());
         propuestaRepo.save(p);
